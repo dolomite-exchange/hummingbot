@@ -1,1 +1,171 @@
 
+import binascii 
+import aiohttp
+import time 
+import asyncio
+import json
+from collections import (
+    deque,
+    OrderedDict
+)
+import logging
+import math
+import time
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional
+)
+from decimal import Decimal
+from web3 import Web3
+
+
+
+import requests 
+
+
+#Dolomite post requests must be in JSON
+#Make sure endpoint attached to routes doesn't include extra backslash 
+#Make sure when retrieving data ["data"] attribute is accessed first when relevant as a prefix 
+#Headers?
+
+infura_url = "https://mainnet.infura.io/v3/d2de8f9c500e4a5c9761ef1ffdd98cc6"
+web3 = Web3(Web3.HTTPProvider(infura_url))
+
+DOLOMITE_REST_ENDPOINT = "http://exchange-api.dolomite.io"
+
+
+
+def api_request_get(url):
+    
+        r = requests.get(url)
+        
+        print(r)
+        
+        response = r.json()
+        
+        return response
+    
+    
+def api_request_post(url, data):
+    
+        headers = {"Content-Type": "application/json"}
+    
+        r = requests.post(url, json=data, headers=headers)
+        
+        print(r)
+        
+        response = r.json()
+        
+        return response
+        
+        
+        
+def build_unsigned_order():
+        
+        
+        url = "%s/v1/orders/prepare" % (DOLOMITE_REST_ENDPOINT,)
+        
+        newAccount = web3.eth.account.create() #new auth address / private key 
+            
+            
+            
+        #Set fee amount for takers 
+        
+        fee_url = f"{DOLOMITE_REST_ENDPOINT}/v1/info"
+        
+        print(fee_url)
+        
+        res = api_request_get(fee_url)
+        
+        #res = self._api_request(http_method="get", url=fee_url)
+        
+        
+        
+        '''
+        #Gas fees 
+        
+        feeData = res["base_fee_amounts"] #find by quoteToken
+        
+        baseAmount = float(feeData[quoteToken]["amount"]) / math.pow(10, 18)
+        maxMatches = res["max_number_of_taker_matches_per_order"]
+        
+        takerGasFees = baseAmount * maxMatches
+        
+        
+        #Commission fees
+        
+        market_url = f"{DOLOMITE_REST_ENDPOINT}/v1/markets/{symbol}"
+        
+        res2 = api_request_get(market_url)
+        
+        #res2 = self._api_request(http_method="get", url=market_url)
+        
+        marketPrice = float(res2["current_price"]["amount"]) / math.pow(10, 18)
+        
+        takerRate = float(res["taker_fee_percentage"])
+        
+        commissionAmount = marketPrice * takerRate * float(amount)
+        
+        #Total 
+        totalTakerFee = takerGasFees + commissionAmount 
+        
+        
+        print(totalTakerFee)
+        
+        '''
+        
+        
+        #fee address
+        feeAddress = res["data"]["fee_collecting_wallet_address"]
+        
+        print(feeAddress)
+        
+        
+        info = {
+            
+                "fee_collecting_wallet_address": feeAddress, #"0x14cBf7a4ce287806f862a17de5Fa09aD1b5825C4", #
+                "wallet_split_percentage": 0, #
+                "owner_address": 0xaFF638fE88eE221e41cB27E7753C855AB4047aEd, #
+                "auth_address": str(newAccount.address), #
+                "order_side": "BUY", #
+                "order_type": "LIMIT", #
+                "auth_private_key": str(binascii.hexlify(newAccount.privateKey).decode("utf-8")), #
+                "market": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2-0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359", #
+                "primary_padded_amount": int(float("1") * math.pow(10, 18)), #
+                "secondary_padded_amount": int(float("225") * math.pow(10, 18)), #
+                "creation_timestamp": int(time.time()) * 1000, #
+
+                "expiration_timestamp": None,
+
+                "fee_padded_amount": 0, #
+                "fee_token_address": '0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359', #
+
+                "dependent_transaction_hash": None,
+                "max_number_of_taker_matches": 0,
+                "base_taker_gas_fee_padded_amount": 0,
+                "order_recipient_address": None,
+                "extra_data": None,
+                "order_hash": None,
+                "ecdsa_multi_hash_signature": None
+            
+        }
+        
+        jData = json.dumps(info).replace('"', '\\"')
+        
+        jData = '"' + jData + '"'
+        
+        
+        print("\n")
+        print(type(jData))
+        print(jData)
+        print("\n")
+
+        response_data = api_request_post(url, jData)
+        
+        print(response_data)
+        
+        
+        
+build_unsigned_order()    
