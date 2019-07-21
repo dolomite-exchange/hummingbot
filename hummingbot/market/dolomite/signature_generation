@@ -1,0 +1,37 @@
+#Create order route!
+
+signature = self.wallet.current_backend.sign_hash(hexstr=order_hash)
+        
+
+url = "%s/v1/orders/create" % (self.DOLOMITE_REST_ENDPOINT,)
+
+        
+response_data = {
+            
+    "ecdsa_multi_hash_signature": signature,
+    "order_hash": order_hash
+            
+}
+        
+data = {**response_data, **prepare_order_dict}
+
+
+
+
+
+#Cancel order route! 
+
+url = "%s/v1/orders/%s/cancel" % (self.DOLOMITE_REST_ENDPOINT, dolomite_id)
+        
+        
+message = str(Web3Wallet.address) + str((int(time.time() * 1000)))
+signature = self.wallet.current_backend.sign_hash(text=message) 
+        
+        
+data = {
+            
+      "owner_address": Web3Wallet.address,
+      "ecdsa_signature": signature, 
+      "cancellation_timestamp": int(time.time()) * 1000
+}
+
