@@ -17,14 +17,14 @@ from typing import (
 
 import re
 import time
-import ujson #
+import ujson 
 import websockets
 from websockets.exceptions import ConnectionClosed
 
 
 from hummingbot.core.utils import async_ttl_cache
-from hummingbot.market.ddex.ddex_active_order_tracker import DolomiteActiveOrderTracker 
-from hummingbot.market.ddex.ddex_order_book import DolomiteOrderBook 
+from hummingbot.market.dolomite.dolomite_active_order_tracker import DolomiteActiveOrderTracker 
+from hummingbot.market.dolomite.dolomite_order_book import DolomiteOrderBook 
 from hummingbot.core.data_type.order_book_tracker_data_source import OrderBookTrackerDataSource
 from hummingbot.logger import HummingbotLogger
 
@@ -38,7 +38,7 @@ from hummingbot.core.data_type.order_book_message import DolomiteOrderBookMessag
 
 REST_URL = "https://exchange-api.dolomite.io"
 
-WS_URL = "https://exchange-api.dolomite.io/ws-connect" #
+WS_URL = "wss://exchange-api.dolomite.io/ws-connect"
 
 
 TICKERS_URL = f"{REST_URL}/v1/markets"
@@ -95,38 +95,30 @@ class DolomiteOrderBookDataSource(OrderBookTrackerDataSource):
             attr_name_map = {"baseToken": "baseAsset", "quoteToken": "quoteAsset"} #dictionary 
 
             market_data: Dict[str, any] = {
-                item["data"]["market"]: {attr_name_map[k]: item[k] for k in ["baseToken", "quoteToken"]}
-                for item in market_data
+                item["market"]: {attr_name_map[k]: item[k] for k in ["baseToken", "quoteToken"]}
+                for item in market_data["data"]
             }
                 
 
             ticker_data: List[Dict[str, any]] = [
-                
-                                                { **ticker_item["data"], **market_data[ticker_item["data"]["market"]]}
-                                                 
-                                                 for ticker_item in ticker_data
-                
-                                                ]
-                
+                                                {**ticker_item, **market_data[ticker_item["market"]]}
+                                                 for ticker_item in ticker_data["data"]]
                 
 
             all_markets: pd.DataFrame = pd.DataFrame.from_records(data=ticker_data,
-                                                                  index="market") #print
-                
-                
-                
-                
+                                                                  index="market") 
 
-            weth_to_usd_price: float = float(all_markets.loc["WETH-DAI"].current_price["amount"]) / math.pow(10, 18)
+
+            weth_to_usd_price: float = float(all_markets.loc["WETH-DAI"].current_price["amount"]) / math.pow(10, all_markets.loc["WETH-DAI"].current_price["currency"]["precision"])
                 
                 
             usd_volume: float = [
                 (
-                    (quoteVolume / math.pow(10, 18))  * weth_to_usd_price if symbol.endswith("WETH") else (quoteVolume / math.pow(10, 18))
+                    quoteVolume * weth_to_usd_price if symbol.endswith("WETH") else quoteVolume
                 )
                 
                 for symbol, quoteVolume in zip(all_markets.index,
-                                               all_markets.period_amount["amount"].astype("float"))]
+                                               float(all_markets.period_amount["amount"] / all_markets.period_amount["currency"]["precision"]))]
                 
                 
             all_markets["USDVolume"] = usd_volume
@@ -190,7 +182,7 @@ class DolomiteOrderBookDataSource(OrderBookTrackerDataSource):
                     dolomite_order_book: DolomiteOrderBook = DolomiteOrderBook()
                     dolomite_active_order_tracker: DolomiteActiveOrderTracker = DolomiteActiveOrderTracker()
                     bids, asks = dolomite_active_order_tracker.convert_snapshot_message_to_order_book_row(snapshot_msg)
-                    dolomite_order_book.apply_snapshot(bids, asks, snapshot_msg.update_id) #
+                    dolomite_order_book.apply_snapshot(bids, asks, snapshot_msg.update_id) 
 
                     
                     retval[trading_pair] = DolomiteOrderBookTrackerEntry(
@@ -254,9 +246,7 @@ class DolomiteOrderBookDataSource(OrderBookTrackerDataSource):
                         
                             "route": "/v1/orders/markets/-market-",
                             "action": "subscribe",
-                            "data": {
-                                "market": trading_pair
-                            }
+                            "data": trading_pair
                         }
                         
               
