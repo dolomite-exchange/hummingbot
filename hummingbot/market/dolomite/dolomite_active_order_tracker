@@ -32,12 +32,12 @@ cdef class DolomiteActiveOrderTracker:
     
 
     def volume_for_ask_price(self, price): #Accounts for changing conditions due to partial fills!
-        return sum([float(msg["availableAmount"]) if 'availableAmount' in msg else (float(msg["primary_amount"]["amount"]) / math.pow(10, 18)) - (float(msg["dealt_amount_primary"]["amount"]) / math.pow(10, 18)) for msg in self._active_asks[price].values()])
+        return sum([float(msg["availableAmount"]) if 'availableAmount' in msg else (float(msg["primary_amount"]["amount"]) / math.pow(10, msg["primary_amount"]["currency"]["precision"])) - (float(msg["dealt_amount_primary"]["amount"]) / math.pow(10, msg["dealt_amount_primary"]["currency"]["precision"])) for msg in self._active_asks[price].values()])
     
         
 
     def volume_for_bid_price(self, price):
-        return sum([float(msg["availableAmount"]) if 'availableAmount' in msg else (float(msg["primary_amount"]["amount"]) / math.pow(10, 18)) - (float(msg["dealt_amount_primary"]["amount"]) / math.pow(10, 18)) for msg in self._active_bids[price].values()])
+        return sum([float(msg["availableAmount"]) if 'availableAmount' in msg else (float(msg["primary_amount"]["amount"]) / math.pow(10, msg["primary_amount"]["currency"]["precision"])) - (float(msg["dealt_amount_primary"]["amount"]) / math.pow(10, msg["dealt_amount_primary"]["currency"]["precision"])) for msg in self._active_bids[price].values()])
     
     
 
@@ -59,19 +59,12 @@ cdef class DolomiteActiveOrderTracker:
         
         #DEFINITONS
         #OPEN - Order visible in order books
-        #CANCELLED - Order cancelled / removed from order books, blockchain confirmed   #Cancelling?
+        #CANCELLED - Order cancelled / removed from order books, blockchain confirmed  
         #EXPIRED - Order expired / removed from order books, blockchain confirmed 
-        #FILLED - Order filled / removed from order books, blockhain confirmed    #Filling? 
+        #FILLED - Order filled / removed from order books, blockhain confirmed 
+
         
         
-        
-        # If it is "trade_success", it means an existing order is either completely or partially filled, and we need to
-        # update or remove the order
-    
-        
-        
-        # If it is "receive", it means a new order is opened. Start tracking it and output a diff row on the respective
-        # order book.
         if message_type == "OPEN": 
             
             side = message.content["order_side"]
@@ -103,8 +96,6 @@ cdef class DolomiteActiveOrderTracker:
                 
                 
 
-        # If it is "done", it means an order is removed. Remove it from tracking and output a diff row on the respective
-        # order book.
         elif message_type == "CANCELLED" or message_type == "EXPIRED" or message_type == "FILLED": 
             
             side = message.content["order_side"]
@@ -149,13 +140,9 @@ cdef class DolomiteActiveOrderTracker:
             else:
                 raise ValueError(f"Unknown order side '{side}'. Aborting.")
                 
-                
-        elif message_type in ["open", "change", "level3OrderbookSnapshot"]: #trade_success
-            # These messages are not used for tracking order book
-            return s_empty_diff, s_empty_diff
+
         else:
-            raise ValueError(f"Unknown message type '{message_type}'. Must be 'trade_success', 'receive', 'change', "
-                             f"'level3OrderbookSnapshot' or 'done'.")
+            raise ValueError(f"Unknown message type '{message_type}'.")
 
             
             
@@ -177,7 +164,7 @@ cdef class DolomiteActiveOrderTracker:
         
             price = Decimal(bid_order["exchange_rate"])
             order_id = bid_order["order_hash"]
-            amount = (float(bid_order["primary_amount"]["amount"]) / math.pow(10, 18)) - (float(bid_order["dealt_amount_primary"]["amount"]) / math.pow(10, 18))
+            amount = (float(bid_order["primary_amount"]["amount"]) / math.pow(10, bid_order["primary_amount"]["currency"]["precision"])) - (float(bid_order["dealt_amount_primary"]["amount"]) / math.pow(10, bid_order["primary_amount"]["currency"]["precision"]))
             
             
             order_dict = {
@@ -194,9 +181,9 @@ cdef class DolomiteActiveOrderTracker:
 
         for ask_order in message.content["data"]["sells"]:
             
-            price = Decimal(bid_order["exchange_rate"])
-            order_id = bid_order["order_hash"]
-            amount = (float(bid_order["primary_amount"]["amount"]) / math.pow(10, 18)) - (float(bid_order["dealt_amount_primary"]["amount"]) / math.pow(10, 18))
+            price = Decimal(ask_order["exchange_rate"])
+            order_id = ask_order["order_hash"]
+            amount = (float(ask_order["primary_amount"]["amount"]) / math.pow(10, ask_order["primary_amount"]["currency"]["precision"])) - (float(ask_order["dealt_amount_primary"]["amount"]) / math.pow(10, ask_order["primary_amount"]["currency"]["precision"]))
             
             order_dict = {
                 "availableAmount": float(amount),
