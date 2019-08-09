@@ -5,7 +5,7 @@ from cachetools import TTLCache
 from collections import (
     deque,
     OrderedDict
-)
+)   
 import logging
 import math
 import time
@@ -21,7 +21,7 @@ from web3 import Web3
 
 from hummingbot.logger import HummingbotLogger
 from hummingbot.core.data_type.cancellation_result import CancellationResult
-from hummingbot.market.ddex.ddex_api_order_book_data_source import DolomiteAPIOrderBookDataSource #
+from hummingbot.market.dolomite.dolomite_api_order_book_data_source import DolomiteAPIOrderBookDataSource 
 from hummingbot.core.event.events import (
     MarketEvent,
     BuyOrderCompletedEvent,
@@ -39,7 +39,7 @@ from hummingbot.core.data_type.limit_order import LimitOrder
 from hummingbot.core.data_type.order_book cimport OrderBook
 from hummingbot.core.data_type.order_book_tracker import OrderBookTrackerDataSourceType
 from hummingbot.market.market_base cimport MarketBase
-from hummingbot.market.ddex.ddex_order_book_tracker import DolomiteOrderBookTracker #
+from hummingbot.market.dolomite.dolomite_order_book_tracker import DolomiteOrderBookTracker 
 from hummingbot.core.network_iterator import NetworkStatus
 from hummingbot.wallet.ethereum.web3_wallet import Web3Wallet
 
@@ -81,7 +81,7 @@ cdef class TradingRule:
         cdef:
             list retval = []
         
-        for market in markets:
+        for market in markets["data"]:
             try:
                 
                 symbol = market["market"]
@@ -95,13 +95,13 @@ cdef class TradingRule:
                     min_maker_order = min_maker_order_usd / weth_price
                     min_taker_order = min_taker_order_usd / weth_price
                     
-                    minMakerOrderSize = min_maker_order / (float(market["current_price"]["amount"]) / math.pow(10, 18))
-                    minTakerOrderSize = min_taker_order / (float(market["current_price"]["amount"]) / math.pow(10, 18))
+                    minMakerOrderSize = min_maker_order / (float(market["current_price"]["amount"]) / math.pow(10, market["current_price"]["currency"]["precision"]))
+                    minTakerOrderSize = min_taker_order / (float(market["current_price"]["amount"]) / math.pow(10, market["current_price"]["currency"]["precision"]))
                     
                 else: #quote token DAI
                 
-                    minMakerOrderSize = min_maker_order_usd / (float(market["current_price"]["amount"]) / math.pow(10, 18))
-                    minTakerOrderSize = min_taker_order_usd / (float(market["current_price"]["amount"]) / math.pow(10, 18))
+                    minMakerOrderSize = min_maker_order_usd / (float(market["current_price"]["amount"]) / math.pow(10, market["current_price"]["currency"]["precision"]))
+                    minTakerOrderSize = min_taker_order_usd / (float(market["current_price"]["amount"]) / math.pow(10, market["current_price"]["currency"]["precision"]))
                 
                 
                 retval.append(TradingRule(
@@ -462,12 +462,12 @@ cdef class DolomiteMarket(MarketBase):
             info_url = f"{self.DOLOMITE_REST_ENDPOINT}/v1/info"
             res = await self._api_request(http_method="get", url=info_url)
             
-            min_maker_order = float(res["data"]["min_usd_maker_trade_amount"]["amount"]) / math.pow(10, 5)
-            min_taker_order = float(res["data"]["min_usd_taker_trade_amount"]["amount"]) / math.pow(10, 5)
+            min_maker_order = float(res["data"]["min_usd_maker_trade_amount"]["amount"]) / math.pow(10, res["data"]["min_usd_maker_trade_amount"]["currency"]["precision"])
+            min_taker_order = float(res["data"]["min_usd_taker_trade_amount"]["amount"]) / math.pow(10, res["data"]["min_usd_taker_trade_amount"]["currency"]["precision"])
             
             
-            markets = await self.get_market("WETH-DAI")
-            weth_price = float(market["data"]["current_price"]["amount"]) / math.pow(10, 18)
+            market = await self.get_market("WETH-DAI")
+            weth_price = float(market["data"]["current_price"]["amount"]) / math.pow(10, market["data"]["current_price"]["currency"]["precision"])
             
             trading_rules_list = TradingRule.parse_exchange_info(markets, min_maker_order, min_taker_order, weth_price)
             self._trading_rules.clear()
@@ -493,7 +493,7 @@ cdef class DolomiteMarket(MarketBase):
                  if o.exchange_order_id is not None]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        for order_update, tracked_order in zip(results, tracked_orders):
+        for order_update, tracked_order in zip(results["data"], tracked_orders):
             
             if isinstance(order_update, Exception):
                 self.logger().network(
@@ -505,7 +505,7 @@ cdef class DolomiteMarket(MarketBase):
                 continue
 
             # Check the exchange order ID against the expected value.
-            exchange_order_id = order_update["data"]["order_hash"]
+            exchange_order_id = order_update["order_hash"]
             if exchange_order_id != tracked_order.exchange_order_id:
                 self.logger().network(f"Incorrect exchange order id '{exchange_order_id}' returned from get order "
                                       f"request for '{tracked_order.exchange_order_id}'. Ignoring.")
@@ -520,8 +520,8 @@ cdef class DolomiteMarket(MarketBase):
                 
                 found = False
                 
-                for order in response:
-                    if order["data"]["order_hash"] == tracked_order.exchange_order_id:
+                for order in response["data"]:
+                    if order["order_hash"] == tracked_order.exchange_order_id:
                         found = True
                         self.logger().network(f"Captured erroneous order update request/response. "
                                               f"Request URL={response.real_url}, "
@@ -543,7 +543,7 @@ cdef class DolomiteMarket(MarketBase):
             
             
             #Not blockchain confirmed!
-            new_filled_amount = float(order_update["data"]["dealt_amount_primary"]["amount"]) / math.pow(10, 18)
+            new_filled_amount = float(order_update["dealt_amount_primary"]["amount"]) / math.pow(10, order_update["dealt_amount_primary"]["currency"]["precision"])
             
             
             #Equals how much more of (primary ticker) amount has been filled 
@@ -552,11 +552,14 @@ cdef class DolomiteMarket(MarketBase):
 
             
             
-            execute_price = 0.0 #Placeholder for market orders (very high / low)
+            execute_price = 0.0 
             
             if tracked_order.order_type == OrderType.LIMIT:
-                execute_price = float(order_update["data"]["exchange_rate"])
-            
+                execute_price = float(order_update["exchange_rate"])
+                
+            elif tracked_order.order_type == OrderType.MARKET:
+                execute_price = float(order_update["market_order_effective_price"]["amount"]) / math.pow(10, order_update["market_order_effective_price"]["currency"]["precision"])
+                
             
             client_order_id = tracked_order.client_order_id
             
@@ -597,11 +600,11 @@ cdef class DolomiteMarket(MarketBase):
                 
                 
             # Update the tracked order
-            tracked_order.last_state = order_update["data"]["order_status"]
-            tracked_order.executed_amount = Decimal(order_update["data"]["dealt_amount_primary"]["amount"]) / math.pow(10, 18)
-            tracked_order.available_amount = Decimal(order_update["data"]["primary_amount"]["amount"]) / math.pow(10, 18) - Decimal(order_update["data"]["dealt_amount_primary"]["amount"]) / math.pow(10, 18)
-            tracked_order.quote_asset_amount = Decimal(order_update["data"]["dealt_amount_secondary"]["amount"]) / math.pow(10, 18)      
-            tracked_order.fee_amount = Decimal(order_update["data"]["fee_usd_at_close"]["amount"]) / math.pow(10, 18) #null if not filled 
+            tracked_order.last_state = order_update["order_status"]
+            tracked_order.executed_amount = Decimal(order_update["dealt_amount_primary"]["amount"]) / math.pow(10, order_update["dealt_amount_primary"]["currency"]["precision"])
+            tracked_order.available_amount = Decimal(order_update["primary_amount"]["amount"]) / math.pow(10, order_update["primary_amount"]["currency"]["precision"]) - Decimal(order_update["dealt_amount_primary"]["amount"]) / math.pow(10, order_update["dealt_amount_primary"]["currency"]["precision"])
+            tracked_order.quote_asset_amount = Decimal(order_update["dealt_amount_secondary"]["amount"]) / math.pow(10, order_update["dealt_amount_secondary"]["currency"]["precision"])      
+            tracked_order.fee_amount = Decimal(order_update["fee_usd_at_close"]["amount"]) / math.pow(10, order_update["fee_usd_at_close"]["currency"]["precision"]) #null if not filled 
             
             
             
@@ -774,7 +777,7 @@ cdef class DolomiteMarket(MarketBase):
         
         feeData = res["data"]["base_spot_trading_fee_amounts"] #find by quoteToken
         
-        baseAmount = float(feeData[quoteToken]["amount"]) / math.pow(10, 18)
+        baseAmount = float(feeData[quoteToken]["amount"]) / math.pow(10, feeData[quoteToken]["currency"]["precision"])
         
         maxMatches = res["data"]["max_number_of_taker_matches_per_order"]
         
@@ -794,15 +797,22 @@ cdef class DolomiteMarket(MarketBase):
         baseToken = symbol.split('-')[0]
         quoteToken = symbol.split('-')[1]
         
+        
+        marketData = await self.get_market(symbol)
+        
+        primaryPrecision = marketData["data"]["period_amount"]["currency"]["precision"]
+        secondaryPrecision = marketData["data"]["period_volume"]["currency"]["precision"]
+        
+        
         secondaryAmount = 0
         
         if order_type is OrderType.MARKET and side == "buy":
-            secondaryAmount = 1000000000000 * math.pow(10, 18)
+            secondaryAmount = 1000000000000 * math.pow(10, secondaryPrecision)
             
         elif order_type is OrderType.MARKET and side == "sell":
-            secondaryAmount = 1e-18 * math.pow(10, 18) #1  
+            secondaryAmount = 1e-18 * math.pow(10, secondaryPrecision)  
         else:
-            secondaryAmount = int((float(amount) * float(price)) * math.pow(10, 18))
+            secondaryAmount = int((float(amount) * float(price)) * math.pow(10, secondaryPrecision))
             
             
             
@@ -818,7 +828,7 @@ cdef class DolomiteMarket(MarketBase):
         
         feeData = res["data"]["base_spot_trading_fee_amounts"] #find by quoteToken
         
-        baseAmount = float(feeData[quoteToken]["amount"]) / math.pow(10, 18)
+        baseAmount = float(feeData[quoteToken]["amount"]) / math.pow(10, feeData[quoteToken]["currency"]["precision"])
         maxMatches = res["data"]["max_number_of_taker_matches_per_order"]
         
         takerGasFees = baseAmount * maxMatches
@@ -830,9 +840,12 @@ cdef class DolomiteMarket(MarketBase):
         
         res2 = await self._api_request(http_method="get", url=market_url)
         
-        marketPrice = float(res2["data"]["current_price"]["amount"]) / math.pow(10, 18)
+        marketPrice = float(res2["data"]["current_price"]["amount"]) / math.pow(10, res2["data"]["current_price"]["currency"]["precision"])
         
         takerRate = float(res["data"]["taker_fee_percentage"])
+        
+        
+        #if marketPrice == 0.0 
         
         commissionAmount = marketPrice * takerRate * float(amount)
         
@@ -853,11 +866,11 @@ cdef class DolomiteMarket(MarketBase):
             "order_type": "MARKET" if order_type is OrderType.MARKET else "LIMIT",
             "auth_private_key": str(binascii.hexlify(newAccount.privateKey).decode("utf-8")),
             "market": tickers[baseToken] + "-" + tickers[quoteToken],
-            "primary_padded_amount": str(int(float(amount) * math.pow(10, 18))),
+            "primary_padded_amount": str(int(float(amount) * math.pow(10, primaryPrecision))),
             "secondary_padded_amount": str(secondaryAmount),
-            "creation_timestamp": int(time.time()) * 1000,
-            "expiration_timestamp": (int(time.time()) * 1000) + (expires*1000),
-            "fee_padded_amount": (totalTakerFee * math.pow(10, 18)) if order_type is OrderType.MARKET else 0,
+            "creation_timestamp": (int(time.time())-5) * 1000,
+            "expiration_timestamp": (int(time.time()-5) * 1000) + (expires*1000),
+            "fee_padded_amount": (totalTakerFee * math.pow(10, secondaryPrecision)) if order_type is OrderType.MARKET else 0,
             "fee_token_address": tickers[quoteToken],
             "dependent_transaction_hash": None,
             "max_number_of_taker_matches": 16 if order_type is OrderType.MARKET else 0,
@@ -943,7 +956,7 @@ cdef class DolomiteMarket(MarketBase):
         
         exchange_order_id = await order.get_exchange_order_id() 
         
-        orderInfo = await get_order(exchange_order_id)
+        orderInfo = await self.get_order(exchange_order_id)
         
         dolomite_id = orderInfo["data"]["dolomite_order_id"]
         
@@ -999,8 +1012,8 @@ cdef class DolomiteMarket(MarketBase):
     
         orderList = list_orders() 
         
-        for order in orderList:
-            if order["data"]["order_hash"] == order_id:
+        for order in orderList["data"]:
+            if order["order_hash"] == order_id:
                 return order
             
         raise IOError(f"Error fetching data from {url}. HTTP status is {response.status}.") 
