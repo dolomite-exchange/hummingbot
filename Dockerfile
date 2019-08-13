@@ -4,6 +4,19 @@ FROM continuumio/miniconda3:4.6.14
 # Dockerfile author / maintainer 
 LABEL maintainer="CoinAlpha, Inc. <dev@coinalpha.com>"
 
+# Build arguments
+ARG BRANCH=""
+ARG COMMIT=""
+ARG BUILD_DATE=""
+LABEL branch=${BRANCH}
+LABEL commit=${COMMIT}
+LABEL date=${BUILD_DATE}
+
+# Set ENV variables
+ENV COMMIT_SHA=${COMMIT}
+ENV COMMIT_BRANCH=${BRANCH}
+ENV BUILD_DATE=${DATE}
+
 # Create mount points
 RUN mkdir /conf && mkdir /logs
 VOLUME /conf /logs
@@ -13,6 +26,8 @@ COPY hummingbot/ hummingbot/
 COPY setup/environment-linux.yml setup/
 COPY setup.py .
 COPY LICENSE .
+COPY README.md .
+COPY DATA_COLLECTION.md .
 
 # Install linux dependencies
 RUN apt update && \

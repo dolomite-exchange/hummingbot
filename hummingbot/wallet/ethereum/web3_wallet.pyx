@@ -68,6 +68,7 @@ cdef class Web3Wallet(WalletBase):
         self._last_backend_network_states = [NetworkStatus.STOPPED] * len(self._wallet_backends)
 
         self._select_best_backend_task = None
+        self._chain = chain
         self._event_dedup_window = OrderedDict()
 
         self._received_asset_forwarder = Web3WalletBackendEventForwarder(
@@ -100,8 +101,16 @@ cdef class Web3Wallet(WalletBase):
         return self._local_account.address
 
     @property
+    def private_key(self) -> str:
+        return self._local_account.privateKey.hex()
+
+    @property
     def block_number(self) -> int:
         return self._best_backend.block_number
+
+    @property
+    def chain(self) -> EthereumChain:
+        return self._chain
 
     @property
     def gas_price(self) -> int:

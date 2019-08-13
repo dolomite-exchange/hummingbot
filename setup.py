@@ -17,11 +17,13 @@ if os.name == "posix":
 
 def main():
     cpu_count = os.cpu_count() or 8
-    version = "20190528"
+    version = "20190812"
     packages = [
         "hummingbot",
         "hummingbot.client",
+        "hummingbot.client.command",
         "hummingbot.client.config",
+        "hummingbot.client.liquidity_bounty",
         "hummingbot.client.ui",
         "hummingbot.core",
         "hummingbot.core.data_type",
@@ -37,6 +39,7 @@ def main():
         "hummingbot.market.coinbase_pro",
         "hummingbot.market.ddex",
         "hummingbot.market.huobi",
+        "hummingbot.market.idex",
         "hummingbot.market.radar_relay",
         "hummingbot.strategy",
         "hummingbot.strategy.arbitrage",
@@ -53,9 +56,12 @@ def main():
     package_data = {
         "hummingbot": [
             "core/cpp/*",
-            "wallet/ethereum/zero_ex/zero_ex_exchange_abi.json"
-            "wallet/ethereum/token_abi/*.json"
-            "wallet/ethereum/erc20_tokens.json"
+            "client/liquidity_bounty/*.txt",
+            "wallet/ethereum/zero_ex/zero_ex_coordinator_abi.json",
+            "wallet/ethereum/zero_ex/zero_ex_coordinator_registry_abi.json",
+            "wallet/ethereum/zero_ex/zero_ex_exchange_abi.json",
+            "wallet/ethereum/token_abi/*.json",
+            "wallet/ethereum/erc20_tokens.json",
             "VERSION",
             "templates/*TEMPLATE.yml"
         ],

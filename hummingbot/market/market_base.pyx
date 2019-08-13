@@ -3,6 +3,7 @@ import pandas as pd
 from typing import (
     Dict,
     List,
+    Tuple,
 )
 
 from hummingbot.core.data_type.cancellation_result import CancellationResult
@@ -16,6 +17,8 @@ from hummingbot.core.event.event_logger import EventLogger
 from hummingbot.core.data_type.limit_order import LimitOrder
 from hummingbot.core.network_iterator import NetworkIterator
 from hummingbot.core.data_type.order_book import OrderBook
+
+from .deposit_info import DepositInfo
 
 NaN = float("nan")
 
@@ -36,11 +39,18 @@ cdef class MarketBase(NetworkIterator):
 
     def __init__(self):
         super().__init__()
-        self.event_reporter = EventReporter(event_source=self.__class__.__name__)
+        self.event_reporter = EventReporter(event_source=self.name)
         self.event_logger = EventLogger(event_source=self.name)
         for event_tag in self.MARKET_EVENTS:
             self.c_add_listener(event_tag.value, self.event_reporter)
             self.c_add_listener(event_tag.value, self.event_logger)
+
+    @staticmethod
+    def split_symbol(symbol: str) -> Tuple[str, str]:
+        try:
+            return tuple(symbol.split('-'))
+        except Exception:
+            raise ValueError(f"Error parsing symbol {symbol}")
 
     @property
     def status_dict(self) -> Dict[str, bool]:
@@ -55,10 +65,6 @@ cdef class MarketBase(NetworkIterator):
         return self.event_logger.event_log
 
     @property
-    def name(self) -> str:
-        return self.__class__.__name__
-
-    @property
     def order_books(self) -> Dict[str, OrderBook]:
         raise NotImplementedError
 
@@ -70,6 +76,18 @@ cdef class MarketBase(NetworkIterator):
     def limit_orders(self) -> List[LimitOrder]:
         raise NotImplementedError
 
+    @property
+    def tracking_states(self) -> Dict[str, any]:
+        return {}
+
+    def restore_tracking_states(self, saved_states: Dict[str, any]):
+        """
+        Restores the tracking states from a previously saved state.
+
+        :param saved_states: Previously saved tracking states from `tracking_states` property.
+        """
+        pass
+
     async def get_active_exchange_markets(self) -> pd.DataFrame:
         """
         :return: data frame with symbol as index, and at least the following columns --
@@ -80,6 +98,9 @@ cdef class MarketBase(NetworkIterator):
     def get_balance(self, currency: str) -> float:
         return self.c_get_balance(currency)
 
+    def get_available_balance(self, currency: str) -> float:
+        return self.c_get_available_balance(currency)
+
     def get_all_balances(self) -> Dict[str, float]:
         raise NotImplementedError
 
@@ -89,8 +110,8 @@ cdef class MarketBase(NetworkIterator):
     def withdraw(self, address: str, currency: str, amount: float) -> str:
         return self.c_withdraw(address, currency, amount)
 
-    def deposit(self, from_wallet: WalletBase, currency: str, amount: float) -> str:
-        return self.c_deposit(from_wallet, currency, amount)
+    async def get_deposit_info(self, asset: str) -> DepositInfo:
+        raise NotImplementedError
 
     def get_order_book(self, symbol: str) -> OrderBook:
         return self.c_get_order_book(symbol)
@@ -149,10 +170,10 @@ cdef class MarketBase(NetworkIterator):
     cdef double c_get_balance(self, str currency) except? -1:
         raise NotImplementedError
 
-    cdef str c_withdraw(self, str address, str currency, double amount):
+    cdef double c_get_available_balance(self, str currency) except? -1:
         raise NotImplementedError
 
-    cdef str c_deposit(self, WalletBase from_wallet, str currency, double amount):
+    cdef str c_withdraw(self, str address, str currency, double amount):
         raise NotImplementedError
 
     cdef OrderBook c_get_order_book(self, str symbol):
@@ -171,6 +192,6 @@ cdef class MarketBase(NetworkIterator):
         price_quantum = self.c_get_order_price_quantum(symbol, price)
         return round(Decimal(price) / price_quantum) * price_quantum
 
-    cdef object c_quantize_order_amount(self, str symbol, double amount):
+    cdef object c_quantize_order_amount(self, str symbol, double amount, double price = 0.0):
         order_size_quantum = self.c_get_order_size_quantum(symbol, amount)
         return (Decimal(amount) // order_size_quantum) * order_size_quantum

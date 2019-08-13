@@ -1,4 +1,3 @@
-import json
 from typing import List
 
 from hummingbot.client.settings import TOKEN_ADDRESSES_FILE_PATH
@@ -10,7 +9,9 @@ from os.path import (
     isfile,
 )
 from collections import OrderedDict
+import json
 from typing import (
+    Callable,
     Dict,
     Optional,
 )
@@ -19,16 +20,19 @@ import shutil
 
 from hummingbot.client.config.config_var import ConfigVar
 from hummingbot.client.config.global_config_map import global_config_map
+from hummingbot.client.liquidity_bounty.liquidity_bounty_config_map import liquidity_bounty_config_map
 from hummingbot.client.settings import (
     GLOBAL_CONFIG_PATH,
     TEMPLATE_PATH,
     CONF_FILE_PATH,
     CONF_POSTFIX,
     CONF_PREFIX,
+    LIQUIDITY_BOUNTY_CONFIG_PATH,
+    DEPRECATED_CONFIG_VALUES,
 )
 
 # Use ruamel.yaml to preserve order and comments in .yml file
-yaml = ruamel.yaml.YAML()
+yaml_parser = ruamel.yaml.YAML()
 
 
 def parse_cvar_value(cvar: ConfigVar, value: any):
@@ -38,7 +42,7 @@ def parse_cvar_value(cvar: ConfigVar, value: any):
         return str(value)
     elif cvar.type in {"list", "dict"}:
         if isinstance(value, str):
-            return eval(value)
+            return json.loads(value)
         else:
             return value
     elif cvar.type == 'float':
@@ -54,9 +58,9 @@ def parse_cvar_value(cvar: ConfigVar, value: any):
             logging.getLogger().error(f"\"{value}\" is not an integer.")
             return 0
     elif cvar.type == 'bool':
-        if type(value) == str and value.lower() in ["true", "yes"]:
+        if isinstance(value, str) and value.lower() in ["true", "yes", "y"]:
             return True
-        elif type(value) == str and value.lower() in ["false", "no"]:
+        elif isinstance(value, str) and value.lower() in ["false", "no", "n"]:
             return False
         else:
             return bool(value)
@@ -111,6 +115,17 @@ def get_strategy_config_map(strategy: str) -> Optional[Dict[str, ConfigVar]]:
         logging.getLogger().error(e, exc_info=True)
 
 
+def get_strategy_starter_file(strategy: str) -> Callable:
+    if strategy is None:
+        return lambda: None
+    try:
+        strategy_module = __import__(f"hummingbot.strategy.{strategy}.start",
+                                     fromlist=[f"hummingbot.strategy.{strategy}"])
+        return getattr(strategy_module, "start")
+    except Exception as e:
+        logging.getLogger().error(e, exc_info=True)
+
+
 def load_required_configs(*args) -> OrderedDict:
     from hummingbot.client.config.in_memory_config_map import in_memory_config_map
     current_strategy = in_memory_config_map.get("strategy").value
@@ -135,9 +150,11 @@ def read_configs_from_yml(strategy_file_path: str = None):
     def load_yml_into_cm(yml_path: str, cm: Dict[str, ConfigVar]):
         try:
             with open(yml_path) as stream:
-                data = yaml.load(stream) or {}
+                data = yaml_parser.load(stream) or {}
                 for key in data:
                     if key == "wallet":
+                        continue
+                    if key in DEPRECATED_CONFIG_VALUES:
                         continue
                     cvar = cm.get(key)
                     val_in_file = data.get(key)
@@ -151,8 +168,22 @@ def read_configs_from_yml(strategy_file_path: str = None):
                                       exc_info=True)
 
     load_yml_into_cm(GLOBAL_CONFIG_PATH, global_config_map)
+    load_yml_into_cm(LIQUIDITY_BOUNTY_CONFIG_PATH, liquidity_bounty_config_map)
     if strategy_file_path:
         load_yml_into_cm(join(CONF_FILE_PATH, strategy_file_path), strategy_config_map)
+
+
+async def save_to_yml(yml_path: str, cm: Dict[str, ConfigVar]):
+    try:
+        with open(yml_path) as stream:
+            data = yaml_parser.load(stream) or {}
+            for key in cm:
+                cvar = cm.get(key)
+                data[key] = cvar.value
+            with open(yml_path, "w+") as outfile:
+                yaml_parser.dump(data, outfile)
+    except Exception as e:
+        logging.getLogger().error("Error writing configs: %s" % (str(e),), exc_info=True)
 
 
 async def write_config_to_yml():
@@ -164,20 +195,8 @@ async def write_config_to_yml():
     strategy_config_map = get_strategy_config_map(current_strategy)
     strategy_file_path = join(CONF_FILE_PATH, in_memory_config_map.get("strategy_file_path").value)
 
-    def save_to_yml(yml_path: str, cm: Dict[str, ConfigVar]):
-        try:
-            with open(yml_path) as stream:
-                data = yaml.load(stream) or {}
-                for key in cm:
-                    cvar = cm.get(key)
-                    data[key] = cvar.value
-                with open(yml_path, "w+") as outfile:
-                    yaml.dump(data, outfile)
-        except Exception as e:
-            logging.getLogger().error("Error writing configs: %s" % (str(e),), exc_info=True)
-
-    save_to_yml(GLOBAL_CONFIG_PATH, global_config_map)
-    save_to_yml(strategy_file_path, strategy_config_map)
+    await save_to_yml(GLOBAL_CONFIG_PATH, global_config_map)
+    await save_to_yml(strategy_file_path, strategy_config_map)
 
 
 async def create_yml_files():
@@ -190,12 +209,12 @@ async def create_yml_files():
             if not isfile(conf_path):
                 shutil.copy(template_path, conf_path)
             with open(template_path, "r") as template_fd:
-                template_data = yaml.load(template_fd)
+                template_data = yaml_parser.load(template_fd)
                 template_version = template_data.get("template_version", 0)
             with open(conf_path, "r") as conf_fd:
                 conf_version = 0
                 try:
-                    conf_data = yaml.load(conf_fd)
+                    conf_data = yaml_parser.load(conf_fd)
                     conf_version = conf_data.get("template_version", 0)
                 except Exception:
                     pass

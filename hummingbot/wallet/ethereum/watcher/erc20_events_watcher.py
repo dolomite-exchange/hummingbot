@@ -130,7 +130,9 @@ class ERC20EventsWatcher(BaseWatcher):
             except asyncio.TimeoutError:
                 continue
             except Exception:
-                self.logger().error("Unknown error trying to fetch new events from ERC20 contracts.", exc_info=True)
+                self.logger().network(f"Error fetching new events from ERC20 contracts.", exc_info=True,
+                                      app_warning_msg=f"Error fetching new events from ERC20 contracts. "
+                                                      f"Check wallet network connection")
 
     async def _handle_event_data(self, event_data: AttributeDict):
         event_type: str = event_data["event"]
@@ -143,17 +145,24 @@ class ERC20EventsWatcher(BaseWatcher):
         elif event_type == APPROVAL_EVENT_NAME:
             self.handle_approve_tokens_event(timestamp, tx_hash, token_asset_name, event_data)
         else:
-            self.logger().error(f"Received log with unrecognized event type - '{event_type}'.")
+            self.logger().warning(f"Received log with unrecognized event type - '{event_type}'.")
 
     def handle_incoming_tokens_event(self,
                                      timestamp: float, tx_hash: str, asset_name: str, event_data: AttributeDict):
         event_args: AttributeDict = event_data["args"]
         is_weth_dai: bool = self.is_weth_dai(asset_name)
-        raw_amount: int = event_args["value"] if not is_weth_dai else event_args.wad
         decimals: int = self._asset_decimals[asset_name]
-        normalized_amount: float = raw_amount * math.pow(10, -decimals)
-        from_address: str = event_args["from"] if not is_weth_dai else event_args.src
-        to_address: str = event_args["to"] if not is_weth_dai else event_args.dst
+
+        if is_weth_dai and hasattr(event_args, 'wad'):
+            raw_amount: int = event_args.wad
+            normalized_amount: float = raw_amount * math.pow(10, -decimals)
+            from_address: str = event_args.src
+            to_address: str = event_args.dst
+        else:
+            raw_amount: int = event_args["value"]
+            normalized_amount: float = raw_amount * math.pow(10, -decimals)
+            from_address: str = event_args["from"]
+            to_address: str = event_args["to"]
 
         if to_address not in self._watch_addresses:
             return
