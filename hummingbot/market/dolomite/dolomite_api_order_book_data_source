@@ -15,6 +15,7 @@ from typing import (
     
 )
 
+
 import re
 import time
 import ujson 
@@ -46,7 +47,7 @@ MARKETS_URL = f"{REST_URL}/v1/markets"
 
 
 
-class DolomiteOrderBookDataSource(OrderBookTrackerDataSource):
+class DolomiteAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
     MESSAGE_TIMEOUT = 30.0
     PING_TIMEOUT = 10.0
@@ -259,7 +260,7 @@ class DolomiteOrderBookDataSource(OrderBookTrackerDataSource):
                         for msg in msgs:
                         
                             # only process necessary messages from Dolomite
-                            if msg["order_status"] == "OPEN" or msg["order_status"] == "CANCELLED" or msg["order_status"] == "FILLED" or msg["order_status"] == "EXPIRED"
+                            if msg["order_status"] == "OPEN" or msg["order_status"] == "CANCELLED" or msg["order_status"] == "FILLED" or msg["order_status"] == "EXPIRED":
                                 diff_msg: DolomiteOrderBookMessage = self.order_book_class.diff_message_from_exchange(msg)
                                 output.put_nowait(diff_msg)
                             
