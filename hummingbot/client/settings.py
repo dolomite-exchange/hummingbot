@@ -28,13 +28,15 @@ EXCHANGES = {
     "ddex",
     "radar_relay",
     "bamboo_relay",
-    "coinbase_pro"
+    "coinbase_pro",
+    "dolomite"
 }
 
 DEXES = {
     "ddex",
     "radar_relay",
     "bamboo_relay",
+    "dolomite"
 }
 
 STRATEGIES = {
@@ -50,6 +52,7 @@ EXAMPLE_PAIRS = {
     "radar_relay": "ZRX-WETH",
     "bamboo_relay": "ZRX-WETH",
     "coinbase_pro": "ETH-USDC",
+    "dolomite": "WETH-DAI"
 }
 
 MAXIMUM_OUTPUT_PANE_LINE_COUNT = 1000

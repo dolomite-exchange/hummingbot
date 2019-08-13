@@ -36,13 +36,18 @@ from hummingbot.logger import HummingbotLogger
 from hummingbot.logger.application_warning import ApplicationWarning
 from hummingbot.market.binance.binance_market import BinanceMarket
 from hummingbot.market.coinbase_pro.coinbase_pro_market import CoinbaseProMarket
+
 from hummingbot.market.ddex.ddex_market import DDEXMarket
+
+from hummingbot.market.dolomite.dolomite_market import DolomiteMarket
+
+
 from hummingbot.market.market_base import MarketBase
+
 from hummingbot.market.radar_relay.radar_relay_market import RadarRelayMarket
 from hummingbot.market.bamboo_relay.bamboo_relay_market import BambooRelayMarket
 from hummingbot.core.data_type.order_book_tracker import OrderBookTrackerDataSourceType
 from hummingbot.core.data_type.trade import Trade
-
 from hummingbot.wallet.ethereum.ethereum_chain import EthereumChain
 from hummingbot.wallet.ethereum.web3_wallet import Web3Wallet
 from hummingbot.core.network_iterator import NetworkStatus
@@ -132,6 +137,7 @@ class HummingbotApplication:
             input_handler=self._handle_command,
             bindings=load_key_bindings(self),
             completer=load_completer(self))
+            
 
         self.acct: Optional[LocalAccount] = None
         self.markets: Dict[str, MarketBase] = {}
@@ -390,17 +396,30 @@ class HummingbotApplication:
             self.wallet: Web3Wallet = Web3Wallet(private_key=self.acct.privateKey,
                                                  backend_urls=[ethereum_rpc_url],
                                                  erc20_token_addresses=erc20_token_addresses,
-                                                 chain=EthereumChain.MAIN_NET)
+                                                 chain=EthereumChain.MAIN_NET) 
+                                                                                  
+
 
     def _initialize_markets(self, market_names: List[Tuple[str, List[str]]]):
         ethereum_rpc_url = global_config_map.get("ethereum_rpc_url").value
+        
         for market_name, symbols in market_names:
+        
             if market_name == "ddex" and self.wallet:
                 market = DDEXMarket(wallet=self.wallet,
                                     ethereum_rpc_url=ethereum_rpc_url,
                                     order_book_tracker_data_source_type=OrderBookTrackerDataSourceType.EXCHANGE_API,
                                     symbols=symbols,
                                     trading_required=self._trading_required)
+                                    
+                                    
+            elif market_name == "dolomite" and self.wallet:
+                market = DolomiteMarket(wallet=self.wallet,
+                                    ethereum_rpc_url=ethereum_rpc_url,
+                                    order_book_tracker_data_source_type=OrderBookTrackerDataSourceType.EXCHANGE_API,
+                                    symbols=symbols,
+                                    trading_required=self._trading_required)
+
 
             elif market_name == "binance":
                 binance_api_key = global_config_map.get("binance_api_key").value
@@ -747,8 +766,12 @@ class HummingbotApplication:
 
             market_names: List[Tuple[str, List[str]]] = [(primary_market, [raw_primary_symbol]),
                                                          (secondary_market, [raw_secondary_symbol])]
+                                                         
             self._initialize_wallet(token_symbols=list(set(primary_assets + secondary_assets)))
-            self._initialize_markets(market_names)
+            	
+            self._initialize_markets(market_names) 
+            	
+            	
             self.assets = set(primary_assets + secondary_assets)
 
             self.market_pair = ArbitrageMarketPair(*([self.markets[primary_market], raw_primary_symbol] +
