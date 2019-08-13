@@ -21,6 +21,7 @@ from hummingbot.logger.application_warning import ApplicationWarning
 from hummingbot.market.binance.binance_market import BinanceMarket
 from hummingbot.market.coinbase_pro.coinbase_pro_market import CoinbaseProMarket
 from hummingbot.market.ddex.ddex_market import DDEXMarket
+from hummingbot.market.dolomite.dolomite_market import DolomiteMarket
 from hummingbot.market.market_base import MarketBase
 from hummingbot.market.radar_relay.radar_relay_market import RadarRelayMarket
 from hummingbot.market.bamboo_relay.bamboo_relay_market import BambooRelayMarket
@@ -66,6 +67,7 @@ MARKET_CLASSES = {
     "idex": IDEXMarket,
     "ddex": DDEXMarket,
     "radar_relay": RadarRelayMarket,
+    "dolomite": DolomiteMarket
 }
 
 
@@ -230,6 +232,15 @@ class HummingbotApplication(*commands):
                                     order_book_tracker_data_source_type=OrderBookTrackerDataSourceType.EXCHANGE_API,
                                     symbols=symbols,
                                     trading_required=self._trading_required)
+                
+                
+            elif market_name == "dolomite" and self.wallet:
+                market = DolomiteMarket(wallet=self.wallet,
+                                    ethereum_rpc_url=ethereum_rpc_url,
+                                    order_book_tracker_data_source_type=OrderBookTrackerDataSourceType.EXCHANGE_API,
+                                    symbols=symbols,
+                                    trading_required=self._trading_required)
+                
 
             elif market_name == "idex" and self.wallet:
                 try:
