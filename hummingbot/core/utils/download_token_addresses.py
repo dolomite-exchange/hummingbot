@@ -10,6 +10,7 @@ from web3 import Web3
 
 
 DDEX_ENDPOINT = "https://api.ddex.io/v3/markets"
+DOLOMITE_ENDPOINT = "https://exchange-api.dolomite.io/v1/tokens"
 RADAR_RELAY_ENDPOINT = "https://api.radarrelay.com/v2/markets?perPage=100&page=1"
 BAMBOO_RELAY_ENDPOINT = "https://api.radarrelay.com/v2/markets?perPage=1000&page=1"
 API_CALL_TIMEOUT = 5
@@ -29,6 +30,25 @@ async def download_ddex_token_addresses(token_dict: Dict[str, str]):
                             token_dict[base] = Web3.toChecksumAddress(market.get("baseTokenAddress"))
                         if quote not in token_dict:
                             token_dict[quote] = Web3.toChecksumAddress(market.get("quoteTokenAddress"))
+                except Exception as err:
+                    logging.getLogger().error(err)
+                    
+                    
+async def download_dolomite_token_addresses(token_dict: Dict[str, str]):
+    async with aiohttp.ClientSession() as client:
+        async with client.get(DOLOMITE_ENDPOINT, timeout=API_CALL_TIMEOUT) as response:
+            if response.status == 200:
+                try:
+                    response = await response.json()
+                    tokens = response.get("data")
+                    
+                    for token in tokens:
+                    	
+                        symbol = token["ticker"]
+
+                        if symbol not in token_dict:
+                            token_dict[symbol] = Web3.toChecksumAddress(token["identifier"])
+                            
                 except Exception as err:
                     logging.getLogger().error(err)
 
@@ -70,6 +90,7 @@ async def download_bamboo_relay_token_addresses(token_dict: Dict[str, str]):
 async def download_erc20_token_addresses(token_dict: Dict[str, str] = {}):
     await download_radar_relay_token_addresses(token_dict)
     await download_ddex_token_addresses(token_dict)
+    await download_dolomite_token_addresses(token_dict)
     await download_bamboo_relay_token_addresses(token_dict)
 
 
