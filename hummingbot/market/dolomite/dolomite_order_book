@@ -60,7 +60,7 @@ cdef class DolomiteOrderBook(OrderBook):
         
         if metadata:
             msg.update(metadata)
-        return DolomiteOrderBookMessage(OrderBookMessageType.DIFF, msg, timestamp) #
+        return DolomiteOrderBookMessage(OrderBookMessageType.DIFF, msg, timestamp)
     
 
 
