@@ -1,6 +1,10 @@
+# distutils: language=c++
+# distutils: sources=hummingbot/core/cpp/OrderBookEntry.cpp
+
 import logging
 
 import numpy as np
+import math
 from decimal import Decimal
 
 from hummingbot.logger import HummingbotLogger
