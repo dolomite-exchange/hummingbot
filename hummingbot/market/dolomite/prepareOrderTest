@@ -1,150 +1,53 @@
+async def _http_client(self) -> aiohttp.ClientSession:
+        if self._shared_client is None:
+            self._shared_client = aiohttp.ClientSession()
+        return self._shared_client
 
-import binascii 
-import aiohttp
-import time 
-import asyncio
-import json
-from collections import (
-    deque,
-    OrderedDict
-)
-import logging
-import math
-import time
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional
-)
-from decimal import Decimal
-from web3 import Web3
-
-
-
-import requests 
-
-
-#Dolomite post requests must be in JSON
-#Make sure endpoint attached to routes doesn't include extra backslash 
-#Make sure when retrieving data ["data"] attribute is accessed first when relevant as a prefix 
-#Headers?
-
-infura_url = "https://mainnet.infura.io/v3/d2de8f9c500e4a5c9761ef1ffdd98cc6"
-web3 = Web3(Web3.HTTPProvider(infura_url))
-
-DOLOMITE_REST_ENDPOINT = "http://exchange-api.dolomite.io"
-
-
-
-def api_request_get(url):
-    
-        r = requests.get(url)
-        
-        print(r)
-        
-        response = r.json()
-        
-        return response
-    
-    
-def api_request_post(url, data):
-    
-        headers = {"Content-Type": "application/json"}
-    
-        r = requests.post(url, json=data, headers=headers)
-        
-        print(r)
-        
-        response = r.json()
-        
-        return response
-        
-        
-        
-def build_unsigned_order():
-        
-        
-        url = "%s/v1/orders/prepare" % (DOLOMITE_REST_ENDPOINT,)
-        
-        newAccount = web3.eth.account.create() #new auth address / private key 
+async def _api_request(self,
+                           http_method: str,
+                           url: str,
+                           data: Optional[Dict[str, Any]] = None,
+                           params: Optional[Dict[str, Any]] = None,
+                           headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+                           
+        client = await self._http_client()
+        async with client.request(http_method, url=url, timeout=self.API_CALL_TIMEOUT, data=data, params=params,
+                                  headers=headers) as response:
             
-            
-            
-        #Set fee amount for takers 
-        
-        fee_url = f"{DOLOMITE_REST_ENDPOINT}/v1/info"
-        
-        print(fee_url)
-        
-        res = api_request_get(fee_url)
-        
-        #res = self._api_request(http_method="get", url=fee_url)
-        
-        
-        
-        '''
-        #Gas fees 
-        
-        feeData = res["base_fee_amounts"] #find by quoteToken
-        
-        baseAmount = float(feeData[quoteToken]["amount"]) / math.pow(10, 18)
-        maxMatches = res["max_number_of_taker_matches_per_order"]
-        
-        takerGasFees = baseAmount * maxMatches
-        
-        
-        #Commission fees
-        
-        market_url = f"{DOLOMITE_REST_ENDPOINT}/v1/markets/{symbol}"
-        
-        res2 = api_request_get(market_url)
-        
-        #res2 = self._api_request(http_method="get", url=market_url)
-        
-        marketPrice = float(res2["current_price"]["amount"]) / math.pow(10, 18)
-        
-        takerRate = float(res["taker_fee_percentage"])
-        
-        commissionAmount = marketPrice * takerRate * float(amount)
-        
-        #Total 
-        totalTakerFee = takerGasFees + commissionAmount 
-        
-        
-        print(totalTakerFee)
-        
-        '''
-        
-        
-        #fee address
-        feeAddress = res["data"]["fee_collecting_wallet_address"]
-        
-        print(feeAddress)
-        
-        
-        info = {
-            
-                "fee_collecting_wallet_address": feeAddress, #"0x14cBf7a4ce287806f862a17de5Fa09aD1b5825C4", #
-                "wallet_split_percentage": 0, #
-                "owner_address": 0xaFF638fE88eE221e41cB27E7753C855AB4047aEd, #
-                "auth_address": str(newAccount.address), #
-                "order_side": "BUY", #
-                "order_type": "LIMIT", #
-                "auth_private_key": str(binascii.hexlify(newAccount.privateKey).decode("utf-8")), #
-                "market": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2-0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359", #
-                "primary_padded_amount": int(float("1") * math.pow(10, 18)), #
-                "secondary_padded_amount": int(float("225") * math.pow(10, 18)), #
-                "creation_timestamp": int(time.time()) * 1000, #
+        if response.status != 200:
+             raise IOError(f"Error fetching data from {url}. HTTP status is {response.status}.")
+             
+        data = await response.json()
 
+        return data
+
+
+
+
+async def test_order(self):
+        
+        url = "http://exchange-api.dolomite.io/v1/orders/prepare"
+        
+        
+        data = {
+            
+                "fee_collecting_wallet_address": "0x14cBf7a4ce287806f862a17de5Fa09aD1b5825C4", 
+                "wallet_split_percentage": 0, 
+                "owner_address": "0xaFF638fE88eE221e41cB27E7753C855AB4047aEd", 
+                "auth_address": "0xb616212D224Bb45a6655D3c0063D526fa39E0136", 
+                "order_side": "BUY", 
+                "order_type": "LIMIT",  
+                "auth_private_key": "e8842445997ee4415737395aa5027115d4bffd62f028ae14d451b99162506fa3", 
+                "market": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2-0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359", 
+                "primary_padded_amount": "1000000000000000000", 
+                "secondary_padded_amount": "225000000000000000000",  
+                "creation_timestamp": int(time.time()) * 1000, 
                 "expiration_timestamp": None,
-
-                "fee_padded_amount": 0, #
-                "fee_token_address": '0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359', #
-
+                "fee_padded_amount": "0000000000000000000", 
+                "fee_token_address": "0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359", 
                 "dependent_transaction_hash": None,
                 "max_number_of_taker_matches": 0,
-                "base_taker_gas_fee_padded_amount": 0,
+                "base_taker_gas_fee_padded_amount": "0000000000000000000",
                 "order_recipient_address": None,
                 "extra_data": None,
                 "order_hash": None,
@@ -152,20 +55,42 @@ def build_unsigned_order():
             
         }
         
-        jData = json.dumps(info).replace('"', '\\"')
-        
-        jData = '"' + jData + '"'
         
         
-        print("\n")
-        print(type(jData))
-        print(jData)
-        print("\n")
+        jData = '"' + json.dumps(data).replace('"', '\\"') + '"' #Use this - 400 Bad Request
+        
+        jData = json.dumps(data) #Use this - 403 Forbidden
+        
+        
 
-        response_data = api_request_post(url, jData)
+        headers = {"Content-Type": "application/json"}
         
-        print(response_data)
+        response_data = await self._api_request("POST", url=url, data=jData, headers=headers)
+        
+        return response_data
         
         
         
-build_unsigned_order()    
+        
+#######
+OUTPUTS
+#######
+
+1) 
+
+<ClientResponse(https://exchange-api.dolomite.io/v1/orders/prepare) [400 Bad Request]>
+<CIMultiDictProxy('Date': 'Tue, 13 Aug 2019 06:04:49 GMT', 'Content-Type': 'application/json', 
+'Content-Length': '415', 'Connection': 'keep-alive', 'Vary': 'Accept-Encoding,Origin', 
+'Referrer-Policy': 'origin-when-cross-origin, strict-origin-when-cross-origin', 'X-Frame-Options': 'DENY', 
+'Content-Encoding': 'gzip', 'X-XSS-Protection': '1; mode=block', 'X-Content-Type-Options': 'nosniff', 
+'Content-Security-Policy': "default-src 'self'", 'X-Permitted-Cross-Domain-Policies': 'master-only')>
+
+2)
+
+<ClientResponse(https://exchange-api.dolomite.io/v1/orders/prepare) [403 Forbidden]>
+<CIMultiDictProxy('Date': 'Tue, 13 Aug 2019 06:07:03 GMT', 'Content-Type': 'application/json', 
+'Content-Length': '324', 'Connection': 'keep-alive', 'Vary': 'Accept-Encoding,Origin', 
+'Referrer-Policy': 'origin-when-cross-origin, strict-origin-when-cross-origin', 
+'X-Frame-Options': 'DENY', 'Content-Encoding': 'gzip', 'X-XSS-Protection': '1; mode=block', 
+'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'self'", 
+'X-Permitted-Cross-Domain-Policies': 'master-only')>
