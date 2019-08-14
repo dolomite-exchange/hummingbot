@@ -51,7 +51,7 @@ from hummingbot.wallet.ethereum.web3_wallet import Web3Wallet
 import binascii 
 import time 
 import json
-
+import urllib.request
 
 s_logger = None
 s_decimal_0 = Decimal(0)
@@ -100,20 +100,20 @@ cdef class TradingRule:
                     min_maker_order = min_maker_order_usd / weth_price
                     min_taker_order = min_taker_order_usd / weth_price
                     
-                    minMakerOrderSize = min_maker_order / (float(market["current_price"]["amount"]) / math.pow(10, market["current_price"]["currency"]["precision"]))
-                    minTakerOrderSize = min_taker_order / (float(market["current_price"]["amount"]) / math.pow(10, market["current_price"]["currency"]["precision"]))
+                    minMakerOrderSize = min_maker_order / (float(market["last_price_traded"]["amount"]) / math.pow(10, market["last_price_traded"]["currency"]["precision"]))
+                    minTakerOrderSize = min_taker_order / (float(market["last_price_traded"]["amount"]) / math.pow(10, market["last_price_traded"]["currency"]["precision"]))
                     
                 else: #quote token DAI
                 
-                    minMakerOrderSize = min_maker_order_usd / (float(market["current_price"]["amount"]) / math.pow(10, market["current_price"]["currency"]["precision"]))
-                    minTakerOrderSize = min_taker_order_usd / (float(market["current_price"]["amount"]) / math.pow(10, market["current_price"]["currency"]["precision"]))
+                    minMakerOrderSize = min_maker_order_usd / (float(market["last_price_traded"]["amount"]) / math.pow(10, market["last_price_traded"]["currency"]["precision"]))
+                    minTakerOrderSize = min_taker_order_usd / (float(market["last_price_traded"]["amount"]) / math.pow(10, market["last_price_traded"]["currency"]["precision"]))
                 
                 
                 retval.append(TradingRule(
                                           symbol,
                                           minMakerOrderSize,
                                           minTakerOrderSize,
-                                          market["current_price"]["currency"]["display_precision"],
+                                          market["last_price_traded"]["currency"]["display_precision"],
                                           market["period_amount"]["currency"]["display_precision"],
                                           True, 
                                           True))
@@ -462,7 +462,8 @@ cdef class DolomiteMarket(MarketBase):
             
             
             market = await self.get_market("WETH-DAI")
-            weth_price = float(market["data"]["current_price"]["amount"]) / math.pow(10, market["data"]["current_price"]["currency"]["precision"])
+            
+            weth_price = float(market["data"]["last_price_traded"]["amount"]) / math.pow(10, market["data"]["last_price_traded"]["currency"]["precision"])
             
             trading_rules_list = TradingRule.parse_exchange_info(markets, min_maker_order, min_taker_order, weth_price)
             self._trading_rules.clear()
@@ -808,7 +809,7 @@ cdef class DolomiteMarket(MarketBase):
                                    expires: int) -> Dict[str, Any]:
         
         
-        url = "%s/v1/orders/prepare" % (self.DOLOMITE_REST_ENDPOINT,)
+        url = "%s/v1/orders/hash" % (self.DOLOMITE_REST_ENDPOINT,)
         
         newAccount = self._w3.eth.account.create() #new auth address / private key 
         
@@ -859,7 +860,7 @@ cdef class DolomiteMarket(MarketBase):
         
         res2 = await self._api_request(http_method="get", url=market_url)
         
-        marketPrice = float(res2["data"]["current_price"]["amount"]) / math.pow(10, res2["data"]["current_price"]["currency"]["precision"])
+        marketPrice = float(res2["data"]["last_price_traded"]["amount"]) / math.pow(10, res2["data"]["last_price_traded"]["currency"]["precision"])
         
         takerRate = float(res["data"]["taker_fee_percentage"])
         
@@ -879,7 +880,7 @@ cdef class DolomiteMarket(MarketBase):
             
             "fee_collecting_wallet_address": feeAddress, 
             "wallet_split_percentage": 0,
-            "owner_address": Web3Wallet.address,
+            "owner_address": "0xaFF638fE88eE221e41cB27E7753C855AB4047aEd", #Web3Wallet.address?
             "auth_address": str(newAccount.address),
             "order_side": side.upper(),
             "order_type": "MARKET" if order_type is OrderType.MARKET else "LIMIT",
@@ -889,11 +890,11 @@ cdef class DolomiteMarket(MarketBase):
             "secondary_padded_amount": str(secondaryAmount),
             "creation_timestamp": (int(time.time())-5) * 1000,
             "expiration_timestamp": (int(time.time()-5) * 1000) + (expires*1000),
-            "fee_padded_amount": (totalTakerFee * math.pow(10, secondaryPrecision)) if order_type is OrderType.MARKET else 0,
+            "fee_padded_amount": str((totalTakerFee * math.pow(10, secondaryPrecision))) if order_type is OrderType.MARKET else "0000000000000000000",
             "fee_token_address": await self.fetch_token_addresses(quoteToken),
             "dependent_transaction_hash": None,
             "max_number_of_taker_matches": 16 if order_type is OrderType.MARKET else 0,
-            "base_taker_gas_fee_padded_amount": feeData[quoteToken]["amount"],
+            "base_taker_gas_fee_padded_amount": str(feeData[quoteToken]["amount"]) if order_type is OrderType.MARKET else "0000000000000000000",
             "order_recipient_address": None,
             "extra_data": None,
             "order_hash": None,
@@ -902,13 +903,14 @@ cdef class DolomiteMarket(MarketBase):
         }
         
         
-        jData = '"' + json.dumps(data).replace('"', '\\"') + '"'
+        self.logger().info(f"{data}")
         
-
+        jData = json.dumps(data).encode('utf8')
         headers = {"Content-Type": "application/json"}
 
         response_data = await self._api_request('post', url=url, data=jData, headers=headers)
         
+        self.logger().info(f"FINAL RESPONSE DATA: {response_data}")
         
         values = [data, response_data]
         
@@ -945,21 +947,14 @@ cdef class DolomiteMarket(MarketBase):
         data = {**response_data, **unsigned_order[0]}
         
         
-        
-
-        jData = '"' + json.dumps(data).replace('"', '\\"') + '"'
-        
-
+        jData = json.dumps(data).encode('utf8')
         headers = {"Content-Type": "application/json"}
 
         response_data = await self._api_request('post', url=url, data=jData, headers=headers)
         
-        
-        
         return response_data
     
-    
-    
+
     
 
     async def cancel_order(self, client_order_id: str) -> Dict[str, Any]:
@@ -994,7 +989,7 @@ cdef class DolomiteMarket(MarketBase):
         }
         
         
-        jData = '"' + json.dumps(data).replace('"', '\\"') + '"'
+        jData = json.dumps(data).encode('utf8')
         
 
         headers = {"Content-Type": "application/json"}

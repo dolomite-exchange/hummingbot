@@ -64,6 +64,7 @@ cdef class Web3Wallet(WalletBase):
         self._local_account = Account.privateKeyToAccount(private_key)
         self._wallet_backends = [Web3WalletBackend(private_key, url, erc20_token_addresses, chain=chain)
                                  for url in backend_urls]
+             
         self._best_backend = self._wallet_backends[0]
         self._last_backend_network_states = [NetworkStatus.STOPPED] * len(self._wallet_backends)
 

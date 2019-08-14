@@ -1,4 +1,5 @@
 import aiohttp
+import json #
 import asyncio
 from async_timeout import timeout
 from cachetools import TTLCache
@@ -21,7 +22,9 @@ from web3 import Web3
 
 from hummingbot.logger import HummingbotLogger
 from hummingbot.core.data_type.cancellation_result import CancellationResult
+
 from hummingbot.market.ddex.ddex_api_order_book_data_source import DDEXAPIOrderBookDataSource
+
 from hummingbot.core.event.events import (
     MarketEvent,
     BuyOrderCompletedEvent,
@@ -98,6 +101,8 @@ cdef class DDEXMarket(MarketBase):
                  wallet_spender_address: str = HYDRO_MAINNET_PROXY,
                  symbols: Optional[List[str]] = None,
                  trading_required: bool = True):
+        
+        
         super().__init__()
         self._order_book_tracker = DDEXOrderBookTracker(data_source_type=order_book_tracker_data_source_type,
                                                         symbols=symbols)
@@ -465,7 +470,11 @@ cdef class DDEXMarket(MarketBase):
         client = await self._http_client()
         async with client.request(http_method, url=url, timeout=self.API_CALL_TIMEOUT, data=data, params=params,
                                   headers=headers) as response:
+                                  
+            self.logger().info(f"URL: {url}")
+            
             if response.status != 200:
+                self.logger().info(f"DATA: {response}")
                 raise IOError(f"Error fetching data from {url}. HTTP status is {response.status}.")
             data = await response.json()
             if data["status"] is not 0:
@@ -848,10 +857,11 @@ cdef class DDEXMarket(MarketBase):
             await self._shared_client.close()
             self._shared_client = None
 
+
     async def check_network(self) -> NetworkStatus:
         if self._wallet.network_status is not NetworkStatus.CONNECTED:
             return NetworkStatus.NOT_CONNECTED
-
+        
         url = f"{self.DDEX_REST_ENDPOINT}/markets/tickers"
         try:
             await self._api_request("GET", url)

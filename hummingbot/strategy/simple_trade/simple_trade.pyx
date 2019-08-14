@@ -1,6 +1,7 @@
 # distutils: language=c++
 from decimal import Decimal
 import logging
+import math #
 from typing import (
     List,
     Tuple,
@@ -309,12 +310,21 @@ cdef class SimpleTradeStrategy(StrategyBase):
 
     cdef c_has_enough_balance(self, object market_info):
         cdef:
+            
             MarketBase market = market_info.market
             double base_asset_balance = market.c_get_balance(market_info.base_asset)
             double quote_asset_balance = market.c_get_balance(market_info.quote_asset)
-            OrderBook order_book = market_info.order_book
+            OrderBook order_book = market_info.order_book #
             double price = order_book.c_get_price_for_volume(True, self._order_amount).result_price
-
+            
+        self.logger().info(f"MARKET PRICE: {price}")
+        
+        #Price NAN if no order book rows (should still pass test if limit order buy)
+        
+        if math.isnan(price):
+            self.logger().info(f"RESOLVED")
+            price = 0 #Temporary 
+        
         return quote_asset_balance >= self._order_amount * price if self._is_buy else base_asset_balance >= self._order_amount
 
 

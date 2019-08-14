@@ -24,6 +24,7 @@ from typing import (
 )
 
 from hummingbot.client.hummingbot_application import HummingbotApplication
+
 from hummingbot.client.config.global_config_map import global_config_map
 from hummingbot.client.config.config_helpers import (
     create_yml_files,

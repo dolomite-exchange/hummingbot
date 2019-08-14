@@ -19,6 +19,9 @@ from typing import (
 import re
 import time
 import ujson 
+import json
+import urllib.request
+import time
 import websockets
 from websockets.exceptions import ConnectionClosed
 
@@ -110,7 +113,7 @@ class DolomiteAPIOrderBookDataSource(OrderBookTrackerDataSource):
                                                                   index="market") 
 
 
-            weth_to_usd_price: float = float(all_markets.loc["WETH-DAI"].current_price["amount"]) / math.pow(10, all_markets.loc["WETH-DAI"].current_price["currency"]["precision"])
+            weth_to_usd_price: float = float(all_markets.loc["WETH-DAI"].last_price_traded["amount"]) / math.pow(10, all_markets.loc["WETH-DAI"].last_price_traded["currency"]["precision"])
                 
                 
             usd_volume: float = [
@@ -147,7 +150,7 @@ class DolomiteAPIOrderBookDataSource(OrderBookTrackerDataSource):
             retry: int = 3
             while retry > 0:
                 try:
-                    async with client.get(f"{REST_URL}/v1/orders/markets/{trading_pair}/depth/unmerged/") as response:
+                    async with client.get(f"{REST_URL}/v1/orders/markets/{trading_pair}/depth/unmerged") as response:
                         response: aiohttp.ClientResponse = response
                         if response.status != 200:
                             raise IOError(f"Error fetching Dolomite market snapshot for {trading_pair}. "
@@ -242,27 +245,29 @@ class DolomiteAPIOrderBookDataSource(OrderBookTrackerDataSource):
                         
                     for trading_pair in trading_pairs: 
                         
+                        self.logger().info(f"{trading_pair}")
                         
-                        request = {
-                        
-                            "route": "/v1/orders/markets/-market-",
+                        request = { #Not working...
+                            
                             "action": "subscribe",
-                            "data": trading_pair
+                            "data": trading_pair,
+                            "route": f"wss://exchange-api.dolomite.io/v1/orders/markets/{trading_pair}"
+                            
                         }
-                        
               
                         await ws.send(ujson.dumps(request))
-                    
-                    
-                    async for raw_msg in self._inner_messages(ws):
-                        msgs = ujson.loads(raw_msg)
                         
-                        for msg in msgs:
-                        
-                            # only process necessary messages from Dolomite
-                            if msg["order_status"] == "OPEN" or msg["order_status"] == "CANCELLED" or msg["order_status"] == "FILLED" or msg["order_status"] == "EXPIRED":
-                                diff_msg: DolomiteOrderBookMessage = self.order_book_class.diff_message_from_exchange(msg)
-                                output.put_nowait(diff_msg)
+                        async for raw_msg in self._inner_messages(ws):
+                            msgs = ujson.loads(raw_msg)
+                            
+                            #self.logger().info(f"DATA: {msgs}")
+                            
+                            for msg in msgs["data"]:
+                                 
+                                 # only process necessary messages from Dolomite
+                                 if msg["order_status"] == "OPEN" or msg["order_status"] == "CANCELLED" or msg["order_status"] == "FILLED" or msg["order_status"] == "EXPIRED":
+                                     diff_msg: DolomiteOrderBookMessage = self.order_book_class.diff_message_from_exchange(msg)
+                                     output.put_nowait(diff_msg)
                             
                             
             except asyncio.CancelledError:
