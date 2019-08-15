@@ -35,133 +35,23 @@ cdef class DolomiteActiveOrderTracker:
         return self._active_bids
     
 
-    def volume_for_ask_price(self, price): #Accounts for changing conditions due to partial fills!
+    def volume_for_ask_price(self, price): 
         pass
-        #return sum([float(msg["availableAmount"]) if 'availableAmount' in msg else (float(msg["primary_amount"]["amount"]) / math.pow(10, msg["primary_amount"]["currency"]["precision"])) - (float(msg["dealt_amount_primary"]["amount"]) / math.pow(10, msg["dealt_amount_primary"]["currency"]["precision"])) for msg in self._active_asks[price].values()])
-    
         
 
     def volume_for_bid_price(self, price):
         pass
-        #return sum([float(msg["availableAmount"]) if 'availableAmount' in msg else (float(msg["primary_amount"]["amount"]) / math.pow(10, msg["primary_amount"]["currency"]["precision"])) - (float(msg["dealt_amount_primary"]["amount"]) / math.pow(10, msg["dealt_amount_primary"]["currency"]["precision"])) for msg in self._active_bids[price].values()])
-    
     
 
-    cdef tuple c_convert_diff_message_to_np_arrays(self, object message): #msg in list of msgs
-        pass 
-        
-          
-         # cdef:
-            
-         #     str message_type = message.content["order_status"] #OPEN, CANCELLED, FILLED, EXPIRED
-         #     object price = Decimal(message.content["exchange_rate"])
-         #     double timestamp = message.timestamp
-         #     double quantity = 0
-         #     str order_type = message.content["order_type"]
-                
-
-         # # Only process limit orders
-         # if order_type != "LIMIT":
-         #     return s_empty_diff, s_empty_diff
-        
-        
-         #DEFINITONS
-         #OPEN - Order visible in order books
-         #CANCELLED - Order cancelled / removed from order books, blockchain confirmed  
-         #EXPIRED - Order expired / removed from order books, blockchain confirmed 
-         #FILLED - Order filled / removed from order books, blockhain confirmed 
-
-        
-        
-         # if message_type == "OPEN": 
-            
-         #     side = message.content["order_side"]
-         #     order_id = message.content["order_hash"]    
-            
-            
-         #     if side == "BUY":
-         #         if price in self._active_bids:
-         #             #Adds msg content of new order in respective price category (or updates msg content)
-         #             self._active_bids[price][order_id] = message.content  
-         #         else:
-         #             #Adds new price category with msg content of new order
-         #             self._active_bids[price] = {order_id: message.content}
-
-         #         quantity = self.volume_for_bid_price(price)
-         #         return np.array([[timestamp, float(price), quantity, message.update_id]], dtype="float64"), s_empty_diff
-            
-         #     elif side == "SELL":
-         #         if price in self._active_asks:
-         #             self._active_asks[price][order_id] = message.content
-         #         else:
-         #             self._active_asks[price] = {order_id: message.content}
-
-         #         quantity = self.volume_for_ask_price(price)
-         #         return s_empty_diff, np.array([[timestamp, float(price), quantity, message.update_id]], dtype="float64")
-            
-         #     else:
-         #         raise ValueError(f"Unknown order side '{side}'. Aborting.")
-                
-                
-
-         # elif message_type == "CANCELLED" or message_type == "EXPIRED" or message_type == "FILLED": 
-            
-         #     side = message.content["order_side"]
-         #     order_id = message.content["order_hash"] 
-            
-         #     if side == "BUY":
-         #         if price in self._active_bids:
-         #             if order_id in self._active_bids[price]:
-         #                 del self._active_bids[price][order_id]
-         #             else:
-         #                 self.logger().debug(f"Order not found in active bids: {message.content}.")
-
-         #             if len(self._active_bids[price]) < 1:
-         #                 del self._active_bids[price]
-         #                 return (np.array([[timestamp, float(price), 0.0, message.update_id]], dtype="float64"),
-         #                         s_empty_diff)
-         #             else:
-         #                 quantity = self.volume_for_bid_price(price)
-         #                 return (np.array([[timestamp, float(price), quantity, message.update_id]], dtype="float64"),
-         #                         s_empty_diff)
-         #         else:
-         #             return s_empty_diff, s_empty_diff
-                
-         #     elif side == "SELL":
-         #         if price in self._active_asks:
-         #             if order_id in self._active_asks[price]:
-         #                 del self._active_asks[price][order_id]
-         #             else:
-         #                 self.logger().debug(f"Order not found in active asks: {message.content}.")
-
-         #             if len(self._active_asks[price]) < 1:
-         #                 del self._active_asks[price]
-         #                 return (s_empty_diff,
-         #                         np.array([[timestamp, float(price), 0.0, message.update_id]], dtype="float64"))
-         #             else:
-         #                 quantity = self.volume_for_ask_price(price)
-         #                 return (s_empty_diff,
-         #                         np.array([[timestamp, float(price), quantity, message.update_id]], dtype="float64"))
-         #         else:
-         #             return s_empty_diff, s_empty_diff
-                
-         #     else:
-         #         raise ValueError(f"Unknown order side '{side}'. Aborting.")
-                
-         
-         # else:
-         #     raise ValueError(f"Unknown message type '{message_type}'.")
-         
-
-         
-            
+    cdef tuple c_convert_diff_message_to_np_arrays(self, object message): 
+        pass             
             
 
     cdef tuple c_convert_snapshot_message_to_np_arrays(self, object message):
         cdef:
             object price
             str order_id
-            str amount
+            float amount
 
         # Refresh all order tracking.
         self._active_bids.clear()
@@ -237,11 +127,6 @@ cdef class DolomiteActiveOrderTracker:
 
     def convert_diff_message_to_order_book_row(self, message):
         pass
-        
-        # np_bids, np_asks = self.c_convert_diff_message_to_np_arrays(message)
-        # bids_row = [OrderBookRow(price, qty, update_id) for ts, price, qty, update_id in np_bids]
-        # asks_row = [OrderBookRow(price, qty, update_id) for ts, price, qty, update_id in np_asks]
-        # return bids_row, asks_row
 
 
     def convert_snapshot_message_to_order_book_row(self, message): 
