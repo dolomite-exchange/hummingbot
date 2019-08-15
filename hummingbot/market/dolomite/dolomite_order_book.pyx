@@ -55,9 +55,6 @@ cdef class DolomiteOrderBook(OrderBook):
                                    timestamp: Optional[float] = None,
                                    metadata: Optional[Dict] = None) -> OrderBookMessage:
         
-        #msg elements in list of msgs
-        
-        
         if metadata:
             msg.update(metadata)
         return DolomiteOrderBookMessage(OrderBookMessageType.DIFF, msg, timestamp)

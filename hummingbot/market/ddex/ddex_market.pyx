@@ -470,11 +470,8 @@ cdef class DDEXMarket(MarketBase):
         client = await self._http_client()
         async with client.request(http_method, url=url, timeout=self.API_CALL_TIMEOUT, data=data, params=params,
                                   headers=headers) as response:
-                                  
-            self.logger().info(f"URL: {url}")
             
             if response.status != 200:
-                self.logger().info(f"DATA: {response}")
                 raise IOError(f"Error fetching data from {url}. HTTP status is {response.status}.")
             data = await response.json()
             if data["status"] is not 0:

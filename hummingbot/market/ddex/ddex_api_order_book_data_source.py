@@ -89,6 +89,8 @@ class DDEXAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
             all_markets: pd.DataFrame = pd.DataFrame.from_records(data=ticker_data,
                                                                   index="marketId")
+                                                                  
+            self.logger().info(f"{all_markets}") #
 
             dai_to_eth_price: float = float(all_markets.loc["DAI-WETH"].price)
             weth_to_usd_price: float = float(all_markets.loc["WETH-TUSD"].price)

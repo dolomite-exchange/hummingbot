@@ -80,7 +80,7 @@ class DolomiteAPIOrderBookDataSource(OrderBookTrackerDataSource):
         """
         async with aiohttp.ClientSession() as client:
             market_response, ticker_response = await asyncio.gather(
-                #same value
+                #identical
                 client.get(MARKETS_URL), 
                 client.get(TICKERS_URL)
             )
@@ -96,7 +96,7 @@ class DolomiteAPIOrderBookDataSource(OrderBookTrackerDataSource):
             ticker_data = await ticker_response.json()
             market_data = await market_response.json()
 
-            attr_name_map = {"baseToken": "baseAsset", "quoteToken": "quoteAsset"} #dictionary 
+            attr_name_map = {"baseToken": "baseAsset", "quoteToken": "quoteAsset"}  
 
             market_data: Dict[str, any] = {
                 item["market"]: {attr_name_map[k]: item[k] for k in ["baseToken", "quoteToken"]}
@@ -106,7 +106,8 @@ class DolomiteAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
             ticker_data: List[Dict[str, any]] = [
                                                 {**ticker_item, **market_data[ticker_item["market"]]}
-                                                 for ticker_item in ticker_data["data"]]
+                                                 for ticker_item in ticker_data["data"]
+                                                 if ticker_item["market"] in market_data]
                 
 
             all_markets: pd.DataFrame = pd.DataFrame.from_records(data=ticker_data,
@@ -149,6 +150,7 @@ class DolomiteAPIOrderBookDataSource(OrderBookTrackerDataSource):
             params: Dict = {"level": level}
             retry: int = 3
             while retry > 0:
+
                 try:
                     async with client.get(f"{REST_URL}/v1/orders/markets/{trading_pair}/depth/unmerged") as response:
                         response: aiohttp.ClientResponse = response
@@ -199,7 +201,8 @@ class DolomiteAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
                     self.logger().info(f"Initialized order book for {trading_pair}. "
                                        f"{index+1}/{number_of_pairs} completed.")
-                    await asyncio.sleep(1.3)
+
+                    await asyncio.sleep(1.3) #5.0
 
                 except Exception:
                     self.logger().error(f"Error getting snapshot for {trading_pair} in get_tracking_pairs.",
@@ -236,78 +239,105 @@ class DolomiteAPIOrderBookDataSource(OrderBookTrackerDataSource):
             
 
     async def listen_for_order_book_diffs(self, ev_loop: asyncio.BaseEventLoop, output: asyncio.Queue):
-        while True:
-            try:
-                trading_pairs: List[str] = await self.get_trading_pairs()
+        pass
+        # while True:
+        #     try:
+        #         trading_pairs: List[str] = await self.get_trading_pairs()
                     
-                async with websockets.connect(WS_URL) as ws:
-                    ws: websockets.WebSocketClientProtocol = ws
+        #         async with websockets.connect(WS_URL) as ws:
+        #             ws: websockets.WebSocketClientProtocol = ws
                         
-                    for trading_pair in trading_pairs: 
+        #             for trading_pair in trading_pairs: 
                         
-                        self.logger().info(f"{trading_pair}")
+        #                 self.logger().info(f"{trading_pair}")
                         
-                        request = { #Not working...
+        #                 request = { #Not working...
                             
-                            "action": "subscribe",
-                            "data": trading_pair,
-                            "route": f"wss://exchange-api.dolomite.io/v1/orders/markets/{trading_pair}"
+        #                     "action": "subscribe",
+        #                     "data": trading_pair,
+        #                     "route": f"wss://exchange-api.dolomite.io/v1/orders/markets/{trading_pair}"
                             
-                        }
+        #                 }
               
-                        await ws.send(ujson.dumps(request))
+        #                 await ws.send(ujson.dumps(request))
                         
-                        async for raw_msg in self._inner_messages(ws):
-                            msgs = ujson.loads(raw_msg)
+        #                 async for raw_msg in self._inner_messages(ws):
+        #                     msgs = ujson.loads(raw_msg)
                             
-                            #self.logger().info(f"DATA: {msgs}")
+        #                     #self.logger().info(f"DATA: {msgs}")
                             
-                            for msg in msgs["data"]:
+        #                     for msg in msgs["data"]:
                                  
-                                 # only process necessary messages from Dolomite
-                                 if msg["order_status"] == "OPEN" or msg["order_status"] == "CANCELLED" or msg["order_status"] == "FILLED" or msg["order_status"] == "EXPIRED":
-                                     diff_msg: DolomiteOrderBookMessage = self.order_book_class.diff_message_from_exchange(msg)
-                                     output.put_nowait(diff_msg)
+        #                          # only process necessary messages from Dolomite
+        #                          if msg["order_status"] == "OPEN" or msg["order_status"] == "CANCELLED" or msg["order_status"] == "FILLED" or msg["order_status"] == "EXPIRED":
+        #                              diff_msg: DolomiteOrderBookMessage = self.order_book_class.diff_message_from_exchange(msg)
+        #                              output.put_nowait(diff_msg)
                             
                             
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                self.logger().error("Unexpected error with WebSocket connection. Retrying after 30 seconds...",
-                                    exc_info=True)
-                await asyncio.sleep(30.0)
+        #     except asyncio.CancelledError:
+        #         raise
+        #     except Exception:
+        #         self.logger().error("Unexpected error with WebSocket connection. Retrying after 30 seconds...",
+        #                             exc_info=True)
+        #         await asyncio.sleep(30.0)
                 
                 
 
     async def listen_for_order_book_snapshots(self, ev_loop: asyncio.BaseEventLoop, output: asyncio.Queue):
+
         await self._get_tracking_pair_done_event.wait()
-        while True:
-            try:
-                trading_pairs: List[str] = await self.get_trading_pairs()
-                async with aiohttp.ClientSession() as client:
-                    for trading_pair in trading_pairs:
-                        try:
-                            snapshot: Dict[str, any] = await self.get_snapshot(client, trading_pair)
-                            snapshot_timestamp: float = time.time()
-                            snapshot_msg: DolomiteOrderBookMessage = self.order_book_class.snapshot_message_from_exchange(
-                                snapshot,
-                                snapshot_timestamp,
-                                {"market": trading_pair}
-                            )
-                            output.put_nowait(snapshot_msg)
-                            self.logger().debug(f"Saved order book snapshot for {trading_pair} at {snapshot_timestamp}")
-                            await asyncio.sleep(5.0)
-                        except asyncio.CancelledError:
-                            raise
-                        except Exception:
-                            self.logger().error("Unexpected error.", exc_info=True)
-                            await asyncio.sleep(5.0)
-                    this_hour: pd.Timestamp = pd.Timestamp.utcnow().replace(minute=0, second=0, microsecond=0)
-                    next_hour: pd.Timestamp = this_hour + pd.Timedelta(hours=1)
-                    delta: float = next_hour.timestamp() - time.time()
-                    await asyncio.sleep(delta)
-            except asyncio.CancelledError:
-                raise
-            except Exception:
+
+        try:
+            trading_pairs: List[str] = await self.get_trading_pairs()
+
+            async with websockets.connect(WS_URL) as ws:
+                ws: websockets.WebSocketClientProtocol = ws
+
+                for trading_pair in trading_pairs:
+
+                    request = { #Subscribe to each market's order book...
+                        "action": "subscribe",
+                        "data": { "market": trading_pair },
+                        "route": f"/v1/orders/markets/-market-/depth/unmerged" 
+                    }
+              
+                    await ws.send(ujson.dumps(request))
+
+                    async for raw_msg in self._inner_messages(ws):                
+                        msg = ujson.loads(raw_msg)
+
+                        self.logger().info(f"DATA: {msg}")
+
+
+
+
+            # async with aiohttp.ClientSession() as client:
+            #     for trading_pair in trading_pairs:
+            #         try:
+            #             snapshot: Dict[str, any] = await self.get_snapshot(client, trading_pair)
+            #             snapshot_timestamp: float = time.time()
+            #             snapshot_msg: DolomiteOrderBookMessage = self.order_book_class.snapshot_message_from_exchange(
+            #                 snapshot,
+            #                 snapshot_timestamp,
+            #                 {"market": trading_pair}
+            #             )
+            #             output.put_nowait(snapshot_msg)
+            #             self.logger().debug(f"Saved order book snapshot for {trading_pair} at {snapshot_timestamp}")
+            #             await asyncio.sleep(5.0)
+            #         except asyncio.CancelledError:
+            #             raise
+            #         except Exception:
+            #             self.logger().error("Unexpected error.", exc_info=True)
+            #             await asyncio.sleep(5.0)
+
+
+                # this_hour: pd.Timestamp = pd.Timestamp.utcnow().replace(minute=0, second=0, microsecond=0)
+                # next_hour: pd.Timestamp = this_hour + pd.Timedelta(hours=1)
+                # delta: float = next_hour.timestamp() - time.time()
+                # await asyncio.sleep(delta)
+
+        except asyncio.CancelledError:
+            raise
+        except Exception:
                 self.logger().error("Unexpected error.", exc_info=True)
                 await asyncio.sleep(5.0)
