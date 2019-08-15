@@ -255,7 +255,7 @@ class DolomiteAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
                 for trading_pair in trading_pairs:
 
-                    self.logger().info(f"PAIR: {trading_pair}")
+                    #self.logger().info(f"PAIR: {trading_pair}")
 
                     request = { #Subscribe to each market's order book...
                         "action": "subscribe",

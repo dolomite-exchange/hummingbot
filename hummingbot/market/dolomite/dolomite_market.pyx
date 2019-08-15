@@ -489,7 +489,7 @@ cdef class DolomiteMarket(MarketBase):
                  if o.exchange_order_id is not None]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        for order_update, tracked_order in zip(results["data"], tracked_orders):
+        for order_update, tracked_order in zip(results, tracked_orders):
             
             if isinstance(order_update, Exception):
                 self.logger().network(
