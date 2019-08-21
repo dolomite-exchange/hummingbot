@@ -1,0 +1,25 @@
+########################################################
+###    Price Target Market Making strategy config    ###
+########################################################
+
+# The following configuations are only required for the
+# price target market making strategy
+
+# Exchange to market make on
+market: null
+
+# Token pair to market make on
+market_symbol_pair: null
+
+# Target liquidity in USD to put on the books
+target_volume_usd: null
+
+# Target spread as a percentage. No order will be placed within
+# target_spread_percentage / 2 of the market price
+target_spread_percentage: null
+
+# Target number of orders per side of the market's books
+target_num_orders: null
+
+# The increment between each price orders are placed at
+price_step_increment: null

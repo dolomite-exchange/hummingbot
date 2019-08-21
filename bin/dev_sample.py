@@ -32,10 +32,10 @@ from hummingbot.client.ui.stdout_redirection import patch_stdout
 from hummingbot.core.utils.wallet_setup import unlock_wallet
 
 
-STRATEGY = "<INSERT_STRATEGY>"
-STRATEGY_PATH = "<INSERT_STRATEGY_PATH>"
-WALLET_PUBLIC_KEY = "<INSERT_WALLET_PUBLIC_KEY>"
-WALLET_PASSWORD = "<INSERT_WALLET_PASSWORD>"
+STRATEGY = "price_target_market_making"
+STRATEGY_PATH = "00_price_target_market_making_strategy.yml"
+WALLET_PUBLIC_KEY = "0x538F3d0F41f94678a4fBa543523F1aa1a028383F"
+WALLET_PASSWORD = "pass"
 
 
 async def main():
