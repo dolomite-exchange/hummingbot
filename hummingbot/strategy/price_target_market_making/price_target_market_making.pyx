@@ -1,5 +1,6 @@
 # distutils: language=c++
 import aiohttp
+import traceback
 import json
 from decimal import Decimal
 import asyncio 
@@ -33,6 +34,7 @@ from hummingbot.strategy.price_target_market_making.ptmm_volume_coordinator impo
     VolumeCoordinator
 )
 from hummingbot.market.dolomite.dolomite_util import DolomiteExchangeRates
+from hummingbot.strategy.price_target_market_making.ptmm_bucket_order_book import (BucketOrderBook)
 
 s_decimal_zero = Decimal(0)
 ds_logger = None
@@ -77,7 +79,11 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
         self.target_spread_percentage = Decimal(target_spread_percentage)
         self.target_num_orders = target_num_orders
         self.price_step_increment = Decimal(price_step_increment)
-        self.volume_coordinator = VolumeCoordinator(self.target_volume_usd, self.target_num_orders)
+        self.volume_coordinator = VolumeCoordinator(
+            self.target_volume_usd / 2, 
+            self.target_num_orders, 
+            self.price_step_increment,
+            self.target_spread_percentage)
         
 
     # ----------------------------------------
@@ -91,8 +97,23 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
     # Placement Engine
 
     async def rebalance_books(self):
+        market = self.market_info.market
         target_price = self.market_rates.convert(1, self.market_info.base_asset, self.market_info.quote_asset)
-        self.logger().info(target_price)
+        target_price = BucketOrderBook.to_bucket_price(target_price, self.price_step_increment)
+
+        order_book = BucketOrderBook(
+            market_symbol=self.market_info.trading_pair,
+            market=market,
+            volume_coordinator=self.volume_coordinator,
+            active_order_tracker=self._sb_order_tracker,
+            market_rates=self.market_rates)
+
+        self.logger().info(f"Getting buckets for price: {target_price}")
+
+        buckets = order_book.get_buckets(target_price)
+
+        self.logger().info(f"Got buckets: {len(buckets)}")
+        self.logger().info(buckets)
 
 
     # ----------------------------------------
@@ -104,10 +125,7 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
                 self._poll_notifier = asyncio.Event()
                 await self._poll_notifier.wait()
 
-                if not self._all_markets_ready:
-                    self._all_markets_ready = all([market.ready for market in self._sb_markets])
-
-                if self._all_markets_ready and self._is_strategy_active:
+                if self.market_info.market.ready and self._is_strategy_active:
                     await self.update_market_data()
 
                     if self.market_rates is not None:
@@ -127,6 +145,8 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
                 else:
                     self.logger().warn(f"Polling update failed. Attempting {remaining_attempts} more time(s) before quitting")
                     self.logger().info(e)
+
+                traceback.print_exc() # TODO: remove
 
 
     async def update_market_data(self):

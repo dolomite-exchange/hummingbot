@@ -3,13 +3,13 @@ import math
 
 class CurveFunction(object):
     def __init__(self, target_volume, order_count, last_row_volume):
-        self.V = target_volume
-        self.N = order_count
-        self.M = last_row_volume
+        self.V = float(target_volume)
+        self.N = float(order_count)
+        self.M = float(last_row_volume)
         self.curve_constant = None
 
     def calc(self, x):
-        return self._curve_f(x, self.curve_constant, self.N, self.M)
+        return self._curve_f(float(x), self.curve_constant, self.N, self.M)
 
     def configure(self):
         def newtons_method(v, n, m, x0, err):
@@ -20,7 +20,7 @@ class CurveFunction(object):
             while delta > err:
                 x0 = x0 - self._f(x0, v, n, m)/self._df(x0, n, m)
                 delta = calc_delta(x0)
-            return x0
+            return float(x0)
 
         initial_guess = 0.2
         error_margin = 1e-5
@@ -42,23 +42,25 @@ class CurveFunction(object):
 
 class LinearFunction(object):
     def __init__(self, target_volume, order_count):
-        self.target_volume = target_volume
-        self.order_count = order_count
+        self.target_volume = float(target_volume)
+        self.order_count = float(order_count)
 
     def calc(self, index):
         def _curve_f(x, v, n):
             v2_n3 = (2 * v) / (3 * n)
             return (2 * v2_n3) - ((v2_n3 / n) * x)
-        return _curve_f(index, self.target_volume, self.order_count)
+        return _curve_f(float(index), self.target_volume, self.order_count)
 
 
 class VolumeCoordinator(object):
-    def __init__(self, target_volume_usd, target_num_orders):
+    def __init__(self, target_volume_usd, target_num_orders, step_increment, target_spread_percentage):
         last_order_size = 70
         min_order_size = 50
         order_threshhold_ratio = 0.6
         
         self.target_num_orders = target_num_orders
+        self.step_increment = step_increment
+        self.target_spread_percentage = target_spread_percentage
         self.target_volume_curve = CurveFunction(target_volume_usd, target_num_orders, last_order_size)
         self.minimum_volume_curve = CurveFunction(target_volume_usd * order_threshhold_ratio, 
                                                   target_num_orders, min_order_size)
