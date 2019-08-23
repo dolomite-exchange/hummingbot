@@ -10,6 +10,7 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
         double _poll_interval
         object _poll_notifier
         object _polling_update_task
+        list action_queue
         int _update_failure_count
         bint _is_strategy_active
         bint _all_markets_ready

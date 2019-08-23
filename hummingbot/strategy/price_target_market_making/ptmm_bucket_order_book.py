@@ -20,10 +20,15 @@ from .ptmm_volume_coordinator import VolumeCoordinator
 s_decimal_zero = Decimal(0)
 s_decimal_one = Decimal(1)
 
+def round_d(amount, n):
+    return Decimal(round(Decimal(amount), n))
+
+
 class BucketType(Enum):
     EMPTY = 1
     BID = 2
     ASK = 3
+
 
 class BucketAmounts(object):
     def __init__(self, current, provided, min, target):
@@ -62,8 +67,8 @@ class OrderBucket(object):
         type_str = self._type_str()
         accessory_str = " <" if is_current_price else ""
         return (
-            "  " + f"{self.price} {accessory_str}".ljust(8) + f"{type_str}".rjust(5) + f" ({status_str}) | ".rjust(12)
-            + self._volume_bar(70, max_secondary_amount) + "\n"
+            "  " + f"{self.price} {accessory_str}".ljust(12) + f"{type_str}".rjust(5) + f" ({status_str}) | ".rjust(12)
+            + self._volume_bar(64, max_secondary_amount) + "\n"
             + "  " + (border_str * 95)
         )
 
@@ -88,14 +93,16 @@ class OrderBucket(object):
         min_index = math.ceil((self.secondary_amounts.min / max_secondary_amount) * length)
         target_index = math.floor((self.secondary_amounts.target / max_secondary_amount) * length)
         
-        print(f"{self.price}: {self.secondary_amounts.provided} | {self.secondary_amounts.min} / {self.secondary_amounts.target}")
-
         line = ""
         for i in range(0, length + 2):
             if i == min_index and min_index > 0: line += "|"
             elif i == target_index and target_index > 0: line += "|"
             elif i <= amount_length and amount_length > 0: line += char
+            elif i > amount_length and i > target_index: break
             else: line += " "
+
+        if self.target_type is not self.type:
+            line = line.lower()
 
         return line.ljust(length)
 
@@ -172,7 +179,6 @@ class BucketOrderBook(object):
             provided_secondary = s_decimal_zero
 
             if price in bid_prices:
-                price = Decimal(price)
                 target_type = BucketType.BID
                 order_index = len(bid_prices) - bid_prices.index(price) - 1
 
@@ -220,7 +226,7 @@ class BucketOrderBook(object):
                     incorrectly_placed_orders += tracked_bids[price]
                     given_type = BucketType.BID
 
-                (provided_primary, provided_secondary) = self._sum_tracked_amounts(tracked_orders)
+                (provided_primary, provided_secondary) = self._sum_tracked_amounts(incorrectly_placed_orders)
 
             target_usd = self.coordinator.target_usd_volume_at(order_index, price)
             min_usd = self.coordinator.min_usd_volume_at(order_index, price)
@@ -229,11 +235,16 @@ class BucketOrderBook(object):
                 target_usd = s_decimal_zero
                 min_usd = s_decimal_zero
 
-            min_secondary = round(self.market_rates.from_base(min_usd, "USD", secondary_ticker), 4)
-            min_primary = round(min_secondary / price, 4)
-            target_secondary = round(self.market_rates.from_base(target_usd, "USD", secondary_ticker), 4)
-            target_primary = round(target_secondary / price, 4)
+            min_secondary = round_d(self.market_rates.from_base(min_usd, "USD", secondary_ticker), 4)
+            min_primary = round_d(min_secondary / price, 4)
+            target_secondary = round_d(self.market_rates.from_base(target_usd, "USD", secondary_ticker), 4)
+            target_primary = round_d(target_secondary / price, 4)
             
+            current_primary = round_d(current_primary, 4)
+            provided_primary = round_d(provided_primary, 4)
+            current_secondary = round_d(current_secondary, 4)
+            provided_secondary = round_d(provided_secondary, 4)
+
             primary_amounts = BucketAmounts(current=current_primary,
                                             provided=provided_primary,
                                             min=min_primary,
@@ -263,7 +274,7 @@ class BucketOrderBook(object):
         num_orders = Decimal(self.coordinator.target_num_orders)
         step_increment = Decimal(self.coordinator.step_increment)
 
-        lowest_ask_price = BucketOrderBook.to_bucket_price(current_price * (s_decimal_one + spread_p), step_increment)
+        lowest_ask_price = BucketOrderBook.to_bucket_price(current_price * (s_decimal_one + spread_p), step_increment) + step_increment
         highest_bid_price = BucketOrderBook.to_bucket_price(current_price * (s_decimal_one - spread_p), step_increment)
 
         highest_bucket_price = lowest_ask_price + (num_orders * step_increment)

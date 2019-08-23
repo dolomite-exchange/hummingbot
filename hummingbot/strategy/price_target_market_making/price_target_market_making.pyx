@@ -2,6 +2,7 @@
 import aiohttp
 import traceback
 import json
+from enum import Enum
 from decimal import Decimal
 import asyncio 
 import logging
@@ -48,6 +49,43 @@ HTTP_CALL_TIMEOUT = 10
 EXCHANGE_RATES_ROUTE = "https://exchange-api.dolomite.io/v1/tokens/rates/latest"
 
 
+class Action(object):
+    def __init__(self, action_type, payload):
+        self.type = action_type
+        self.payload = payload
+        pass
+
+    class ActionType(Enum):
+        CANCEL = 1
+        PLACE = 2
+        REPLACE = 3
+
+    class CancelPayload(object):
+        def __init__(self, order_id):
+            self.order_id = order_id
+
+    class PlacePayload(object):
+        def __init__(self, order_type, order_side, quantity, price = None):
+            self.order_type = order_type
+            self.order_side = order_side
+            self.quantity = quantity
+            self.price = price
+
+    @classmethod
+    def cancel(cls, order_id):
+        return Action(Action.ActionType.CANCEL, Action.CancelPayload(order_id))
+
+    @classmethod
+    def place(cls, order_type, order_side, quantity, price):
+        return Action(Action.ActionType.PLACE, Action.PlacePayload(order_type, order_side, quantity, price))
+
+    @classmethod
+    def replace(cls, order_id, order_type, order_side, quantity, price):
+        return Action(Action.ActionType.REPLACE, (
+                Action.CancelPayload(order_id), 
+                Action.PlacePayload(order_type, order_side, quantity, price)))
+
+
 cdef class PriceTargetMarketMakingStrategy(StrategyBase):
     
     @classmethod
@@ -64,7 +102,7 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
                  target_spread_percentage: float,
                  target_num_orders: int,
                  price_step_increment: float,
-                 poll_interval: float = 10):
+                 poll_interval: float = 15):
         super().__init__()
 
         self._last_timestamp = 0
@@ -78,6 +116,7 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
 
         self.c_add_markets([market_info.market])
 
+        self.action_queue = []
         self.market_info = market_info
         self.market = market_info.market
         self.market_rates = None
@@ -96,20 +135,41 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
     # Status Output
 
     def format_status(self) -> str:
-        (buckets, target_price, actual_target_price) = self.get_bucket_order_books()
+        (buckets, target_price, actual_target_price) = self._get_bucket_order_books()
 
         lines = []
         warning_lines = []
         max_secondary_amount = 0
-        
+
+        # Misc Tables
+        markets_df = self.market_status_data_frame([self.market_info])
+        lines.extend(["", "  Markets:"]  + ["    " + line for line in str(markets_df).split("\n")])
+
+        assets_df = self.wallet_balance_data_frame([self.market_info])
+        lines.extend(["", "  Assets:"] + ["    " + line for line in str(assets_df).split("\n")])
+
+        warning_lines.extend(self.balance_warning([self.market_info]))
+
+        # Active order table
+        active_orders = self._sb_order_tracker.market_pair_to_active_orders[self.market_info]
+
+        if len(active_orders) > 0:
+            df = LimitOrder.to_pandas(active_orders)
+            df_lines = str(df).split("\n")
+            lines.extend(["", "  Active orders:"] +
+                         ["    " + line for line in df_lines])
+        else:
+            lines.extend(["", "  No active maker orders."])
+
+        # Bucket order book table
         for bucket in buckets:
             amount = max(bucket.secondary_amounts.target, bucket.secondary_amounts.provided)
             if amount > max_secondary_amount:
                 max_secondary_amount = amount
 
         lines.extend(["", f"  Targeting Price: {actual_target_price}"])
-        lines.extend(["", f"  Liquidity Target: ${round(self.target_volume_usd, 2)}"])
-        lines.extend(["", "  Price".ljust(8) + "Type".rjust(7) + "Status ".rjust(12), "  " + ("=" * 95)])
+        lines.extend([f"  Liquidity Target: ${round(self.target_volume_usd, 2)}"])
+        lines.extend(["", "  Price".ljust(12) + "Type".rjust(7) + "Status   ".rjust(12), "  " + ("=" * 95)])
 
         for bucket in buckets:
             lines.extend([bucket.status_row(max_secondary_amount, bucket.price == target_price)])
@@ -123,7 +183,94 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
     # ----------------------------------------
     # Placement Engine
 
-    def get_bucket_order_books(self) -> (List[OrderBucket], Decimal):
+    async def rebalance_books(self):
+        (buckets, target_price, real_target_price) = self._get_bucket_order_books()
+
+        self.logger().info(f"Rebalancing order books at price: {real_target_price}")
+
+        for bucket in buckets:
+            
+            # Cancel misplaced orders
+            for bad_order in bucket.incorrectly_placed_orders:
+                self.queue(Action.cancel(bad_order.client_order_id))
+
+            # Check for multiple tracked orders, cancel all but the largest
+            if len(bucket.tracked_orders) > 1:
+                bucket.tracked_orders.sort(key=lambda o: o.quantity, reverse=True)
+                tracked_order = bucket.tracked_orders[0]
+                for dup_order in bucket.tracked_orders[0:]:
+                    self.queue(Action.cancel(dup_order.client_order_id))
+            elif len(bucket.tracked_orders) == 1:
+                tracked_order = bucket.tracked_orders[0]
+            else:
+                tracked_order = None
+
+            # Correct order fill amounts
+            if bucket.type == bucket.target_type and bucket.target_type is not BucketType.EMPTY:
+                is_below_min = bucket.primary_amounts.provided <= bucket.primary_amounts.min
+                is_above_target_threshold = bucket.primary_amounts.provided > (bucket.primary_amounts.target * Decimal(1.10))
+
+                if is_below_min or is_above_target_threshold:
+                    order_side = TradeType.BUY if bucket.target_type is BucketType.BID else TradeType.SELL
+                    order_type = OrderType.LIMIT
+                    order_payload = Action.PlacePayload(order_type, order_side, bucket.primary_amounts.target, bucket.price)
+
+                    if tracked_order is not None:
+                        cancellation_payload = Action.CancelPayload(tracked_order.client_order_id)
+                        self.queue(Action(Action.ActionType.REPLACE, (cancellation_payload, order_payload)))
+                    else:
+                        self.queue(Action(Action.ActionType.PLACE, order_payload))
+
+        await self.perform_queued_actions()
+            
+
+    def queue(self, action):
+        self.action_queue.append(action)
+
+
+    async def perform_queued_actions(self):
+        '''
+        Calculate a wait time between each action based on the set polling interval and 
+        action count, then perform each action in order and wait the calculated wait time
+        between each execution
+        '''
+        wait_time = min(self._poll_interval / len(self.action_queue), 0.5)
+        market_info = self.market_info
+        market = self.market
+
+        for action in self.action_queue:
+            if action.type is Action.ActionType.CANCEL:
+                market.cancel(market_info.trading_pair, action.payload.order_id)
+            else:
+                order_payload = action.payload
+
+                if action.type is Action.ActionType.REPLACE:
+                    (__, order_payload) = action.payload
+
+                if order_payload.order_side is TradeType.BUY:
+                    self.c_buy_with_specific_market(
+                        market_info,
+                        order_payload.quantity,
+                        order_payload.order_type,
+                        order_payload.price)
+                elif order_payload.order_side is TradeType.SELL:
+                    self.c_sell_with_specific_market(
+                        market_info,
+                        order_payload.quantity,
+                        order_payload.order_type,
+                        order_payload.price)
+
+                await asyncio.sleep(0.15) 
+
+                if action.type is Action.ActionType.REPLACE:
+                    (cancellation_payload, __) = action.payload
+                    market.cancel(market_info.trading_pair, cancellation_payload.order_id)
+                    
+            
+            await asyncio.sleep(wait_time) 
+
+
+    def _get_bucket_order_books(self) -> (List[OrderBucket], Decimal):
         '''
         return (order_buckets[], current_price)
         '''
@@ -139,97 +286,6 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
             market_rates=self.market_rates)
         
         return (order_book.get_buckets(target_price), target_price, round(actual_target_price, 4))
-
-
-    async def rebalance_books(self):
-        (buckets, target_price, __) = self.get_bucket_order_books()
-
-        # self.logger().info(f"============================================")
-        
-        for bucket in buckets:
-            
-            # self.logger().info('BUCKET!')
-
-            # self.logger().info(f"Price: {bucket.price}")
-            # self.logger().info(f"Target Type: {bucket.target_type}")
-            # self.logger().info(f"Current Type: {bucket.type}")
-            # self.logger().info(f"Provided: {bucket.primary_amounts.provided}")
-            # self.logger().info(f"Target: {bucket.primary_amounts.target}")
-            # self.logger().info(f"--------------------------------------------")
-
-
-
-
-            if bucket.primary_amounts.provided <= 0:
-                self.logger().info(bucket.primary_amounts.target)
-                if bucket.target_type == BucketType.BID:
-                    self.c_buy_with_specific_market(
-                        self.market_info,
-                        bucket.primary_amounts.target,
-                        OrderType.LIMIT,
-                        bucket.price)
-                elif bucket.target_type == BucketType.ASK:
-                    self.c_sell_with_specific_market(
-                        self.market_info,
-                        bucket.primary_amounts.target,
-                        OrderType.LIMIT,
-                        bucket.price)
-
-
-                # # Cancel our orders that are in the spread or outside the range
-                # if ASK or BID but should be EMPTY:
-                #     if we have ask or bid orders here:
-                #         cancel them
-
-                # # Cancel our ask orders that should be bid orders
-                # # Then (diff run) queue any other maker ask orders for filling
-                # if ASK but should be BID:
-                #     if we have ask orders here:
-                #         cancel them
-                #     elif the fillable amount > 0:
-                #         # notice: this can only occur on the pass through after we cancel out orders at this bucket!
-                #         queue these orders for BUYing (will be checked for profitability later)
-
-                # # Cancel our bid orders that should be ask orders
-                # # Then (diff run) queue any other maker bid orders for filling
-                # if BID but should be ASK:
-                #     if we have bid orders here:
-                #         cancel them
-                #     elif the fillable amount > 0:
-                #         # notice: this can only occur on the pass through after we cancel out orders at this bucket!
-                #         queue these orders for SELLing (will be checked for profitability later)
-
-                # if BID and should be BID:
-                #     # outside_liquidity_provided = primary.current_amount - primary.provided_amount
-                #     # if (primary.provided_liquidity)
-
-                #     if primary.provided_amount <= primary.min_amount:
-                #         replace(order)
-                #     elif primary.provided_amount >= (primary.target_amount * Decimal(1.10)):
-
-
-
-
-
-
-
-                    # object market_symbol_pair, object amount,
-                    #                                         object order_type = OrderType.MARKET,
-                    #                                         object price = decimal_nan
-
-            # current
-            # provided
-            # min
-            # target
-
-            # price
-            # type
-            # target_type
-            # fillable_quantity
-            # primary_amounts
-            # secondary_amounts
-            # tracked_orders
-            # incorrectly_placed_orders
 
 
     # ----------------------------------------
@@ -314,6 +370,36 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
             if not self._poll_notifier.is_set():
                 self._poll_notifier.set()
         self._last_timestamp = timestamp
+
+
+    # self._place_order(
+    #                     order_payload.order_type,
+    #                     order_payload.order_side,
+    #                     order_payload.quantity,
+    #                     order_payload.price)
+    # def _place_order(self, order_type, order_side, amount, price):
+    #         cdef:
+    #             MarketBase market = self.market
+
+    #         kwargs = { "expiration_ts": self._current_timestamp + self._sb_limit_order_min_expiration }
+            
+    #         if self.market not in self._sb_markets:
+    #             raise ValueError(f"Market object for buy order is not in the whitelisted markets set.")
+
+    #         if order_side is TradeType.BUY:
+    #             order_id = market.c_buy(self.market_info.trading_pair, amount,
+    #                                     order_type=order_type, price=price, kwargs=kwargs)
+    #         elif order_side is TradeType.SELL:
+    #             order_id = market.c_sell(self.market_info.trading_pair, amount,
+    #                                     order_type=order_type, price=price, kwargs=kwargs)
+
+    #         # Start order tracking
+    #         if order_type == OrderType.LIMIT:
+    #             self.c_start_tracking_limit_order(self.market_info, order_id, True, price, amount)
+    #         elif order_type == OrderType.MARKET:
+    #             self.c_start_tracking_market_order(self.market_info, order_id, True, amount)
+
+    #         return order_id
 
 
     async def http_request(self, http_method: str, url: str, data: Optional[Dict[str, Any]] = None,
