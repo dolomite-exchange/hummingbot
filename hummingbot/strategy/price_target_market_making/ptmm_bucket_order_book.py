@@ -67,7 +67,7 @@ class OrderBucket(object):
         type_str = self._type_str()
         accessory_str = " <" if is_current_price else ""
         return (
-            "  " + f"{self.price} {accessory_str}".ljust(12) + f"{type_str}".rjust(5) + f" ({status_str}) | ".rjust(12)
+            "  " + f"{self.price:.2f} {accessory_str}".ljust(12) + f"{type_str}".rjust(5) + f" ({status_str}) | ".rjust(12)
             + self._volume_bar(64, max_secondary_amount) + "\n"
             + "  " + (border_str * 95)
         )

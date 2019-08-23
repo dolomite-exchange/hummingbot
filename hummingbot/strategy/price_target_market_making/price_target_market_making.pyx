@@ -4,6 +4,7 @@ import traceback
 import json
 from enum import Enum
 from decimal import Decimal
+import random
 import asyncio 
 import logging
 from typing import (
@@ -209,8 +210,11 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
             if bucket.type == bucket.target_type and bucket.target_type is not BucketType.EMPTY:
                 is_below_min = bucket.primary_amounts.provided <= bucket.primary_amounts.min
                 is_above_target_threshold = bucket.primary_amounts.provided > (bucket.primary_amounts.target * Decimal(1.10))
+                
+                is_between_bounds = bucket.primary_amounts.provided < bucket.primary_amounts.target and not is_below_min
+                should_randomly_rebalance = is_between_bounds and random.random() < 0.4
 
-                if is_below_min or is_above_target_threshold:
+                if is_below_min or is_above_target_threshold or should_randomly_rebalance:
                     order_side = TradeType.BUY if bucket.target_type is BucketType.BID else TradeType.SELL
                     order_type = OrderType.LIMIT
                     order_payload = Action.PlacePayload(order_type, order_side, bucket.primary_amounts.target, bucket.price)
@@ -234,6 +238,9 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
         action count, then perform each action in order and wait the calculated wait time
         between each execution
         '''
+        if len(self.action_queue) <= 0:
+            return
+
         wait_time = min(self._poll_interval / len(self.action_queue), 0.5)
         market_info = self.market_info
         market = self.market
@@ -260,13 +267,13 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
                         order_payload.order_type,
                         order_payload.price)
 
-                await asyncio.sleep(0.15) 
+                await asyncio.sleep(0.3) # Sleep between order creation and cancellation
 
                 if action.type is Action.ActionType.REPLACE:
                     (cancellation_payload, __) = action.payload
                     market.cancel(market_info.trading_pair, cancellation_payload.order_id)
                     
-            
+            self.action_queue = []
             await asyncio.sleep(wait_time) 
 
 
@@ -370,36 +377,6 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
             if not self._poll_notifier.is_set():
                 self._poll_notifier.set()
         self._last_timestamp = timestamp
-
-
-    # self._place_order(
-    #                     order_payload.order_type,
-    #                     order_payload.order_side,
-    #                     order_payload.quantity,
-    #                     order_payload.price)
-    # def _place_order(self, order_type, order_side, amount, price):
-    #         cdef:
-    #             MarketBase market = self.market
-
-    #         kwargs = { "expiration_ts": self._current_timestamp + self._sb_limit_order_min_expiration }
-            
-    #         if self.market not in self._sb_markets:
-    #             raise ValueError(f"Market object for buy order is not in the whitelisted markets set.")
-
-    #         if order_side is TradeType.BUY:
-    #             order_id = market.c_buy(self.market_info.trading_pair, amount,
-    #                                     order_type=order_type, price=price, kwargs=kwargs)
-    #         elif order_side is TradeType.SELL:
-    #             order_id = market.c_sell(self.market_info.trading_pair, amount,
-    #                                     order_type=order_type, price=price, kwargs=kwargs)
-
-    #         # Start order tracking
-    #         if order_type == OrderType.LIMIT:
-    #             self.c_start_tracking_limit_order(self.market_info, order_id, True, price, amount)
-    #         elif order_type == OrderType.MARKET:
-    #             self.c_start_tracking_market_order(self.market_info, order_id, True, amount)
-
-    #         return order_id
 
 
     async def http_request(self, http_method: str, url: str, data: Optional[Dict[str, Any]] = None,
