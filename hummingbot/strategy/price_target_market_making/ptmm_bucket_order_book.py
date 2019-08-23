@@ -52,8 +52,52 @@ class OrderBucket(object):
         self.tracked_orders = tracked_orders
         self.incorrectly_placed_orders = incorrectly_placed_orders
 
+
     def __repr__(self) -> str:
         return (f"OrderBucket({self.price}, '{self.type}', '{self.target_type}')")
+
+
+    def status_row(self, max_secondary_amount, is_current_price, border_str="-") -> str:
+        status_str = self._status_str()
+        type_str = self._type_str()
+        accessory_str = " <" if is_current_price else ""
+        return (
+            "  " + f"{self.price} {accessory_str}".ljust(8) + f"{type_str}".rjust(5) + f" ({status_str}) | ".rjust(12)
+            + self._volume_bar(70, max_secondary_amount) + "\n"
+            + "  " + (border_str * 95)
+        )
+
+    # --------------------------------------
+
+    def _status_str(self) -> str:
+        if len(self.incorrectly_placed_orders) > 0: return "WRONG"
+        if self.target_type is BucketType.EMPTY: return "OK"
+        if self.type is not self.target_type: return "FILL"
+        if self.secondary_amounts.provided <= self.secondary_amounts.min: return "LOW"
+        if self.secondary_amounts.provided > (self.secondary_amounts.target * Decimal(1.10)): return "HIGH"
+        return "OK"
+
+    def _type_str(self) -> str:
+        if self.target_type is BucketType.BID: return "BID"
+        if self.target_type is BucketType.ASK: return "ASK"
+        return ""
+
+    def _volume_bar(self, length, max_secondary_amount) -> str:
+        char = "B" if self.type is BucketType.BID else "S"
+        amount_length = int((self.secondary_amounts.provided / max_secondary_amount) * length)
+        min_index = math.ceil((self.secondary_amounts.min / max_secondary_amount) * length)
+        target_index = math.floor((self.secondary_amounts.target / max_secondary_amount) * length)
+        
+        print(f"{self.price}: {self.secondary_amounts.provided} | {self.secondary_amounts.min} / {self.secondary_amounts.target}")
+
+        line = ""
+        for i in range(0, length + 2):
+            if i == min_index and min_index > 0: line += "|"
+            elif i == target_index and target_index > 0: line += "|"
+            elif i <= amount_length and amount_length > 0: line += char
+            else: line += " "
+
+        return line.ljust(length)
 
 
 class BucketOrderBook(object):
@@ -96,24 +140,24 @@ class BucketOrderBook(object):
             if bucket_price not in ask_rows: ask_rows[bucket_price] = []
             ask_rows[bucket_price].append(ask)
 
-        for tracked_bid in self.tracker.active_bids:
+        for (__, tracked_bid) in self.tracker.active_bids:
             bucket_price = to_bucket_price(tracked_bid.price)
             if bucket_price not in tracked_bids: tracked_bids[bucket_price] = []
             tracked_bids[bucket_price].append(tracked_bid)
 
-        for tracked_ask in self.tracker.active_bids:
+        for (__, tracked_ask) in self.tracker.active_asks:
             bucket_price = to_bucket_price(tracked_ask.price)
             if bucket_price not in tracked_asks: tracked_asks[bucket_price] = []
             tracked_asks[bucket_price].append(tracked_ask)
 
-        tracked_prices = set(
+        tracked_prices = sorted(set(
             list(bid_rows.keys()) +
             list(ask_rows.keys()) +
             list(tracked_bids.keys()) +
             list(tracked_asks.keys()) +
             bid_prices +
             spread_prices +
-            ask_prices)
+            ask_prices), reverse=True)
 
         for price in tracked_prices:
             order_index = s_decimal_zero
@@ -170,10 +214,10 @@ class BucketOrderBook(object):
 
             else:
                 if price in tracked_asks:
-                    tracked_orders += tracked_asks[price]
+                    incorrectly_placed_orders += tracked_asks[price]
                     given_type = BucketType.ASK
                 if price in tracked_bids:
-                    tracked_orders += tracked_bids[price]
+                    incorrectly_placed_orders += tracked_bids[price]
                     given_type = BucketType.BID
 
                 (provided_primary, provided_secondary) = self._sum_tracked_amounts(tracked_orders)
@@ -185,8 +229,8 @@ class BucketOrderBook(object):
                 target_usd = s_decimal_zero
                 min_usd = s_decimal_zero
 
-            min_primary = round(self.market_rates.from_base(min_usd, "USD", secondary_ticker), 4)
-            min_secondary = round(min_primary / price, 4)
+            min_secondary = round(self.market_rates.from_base(min_usd, "USD", secondary_ticker), 4)
+            min_primary = round(min_secondary / price, 4)
             target_secondary = round(self.market_rates.from_base(target_usd, "USD", secondary_ticker), 4)
             target_primary = round(target_secondary / price, 4)
             
@@ -195,9 +239,9 @@ class BucketOrderBook(object):
                                             min=min_primary,
                                             target=target_primary)
 
-            secondary_amounts = BucketAmounts(current=target_secondary,
-                                            provided=target_secondary,
-                                            min=target_secondary,
+            secondary_amounts = BucketAmounts(current=current_secondary,
+                                            provided=provided_secondary,
+                                            min=min_secondary,
                                             target=target_secondary)
 
             buckets.append(OrderBucket(price=price,

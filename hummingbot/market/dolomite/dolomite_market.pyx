@@ -736,8 +736,8 @@ cdef class DolomiteMarket(MarketBase):
         async with self._shared_client.request(http_method, url=f"{API_REST_ENDPOINT}{url}", timeout=API_CALL_TIMEOUT, 
                                                data=data, params=params, headers=headers) as response:
             if response.status != 200:
-                self.logger().debug("Issue with Dolomite API, response: ")
-                self.logger().debug(await response.json())
+                self.logger().info("Issue with Dolomite API, response: ")
+                self.logger().info(await response.json())
                 raise IOError(f"Error fetching data from {url}. HTTP status is {response.status}.")
             data = await response.json()
             return data
