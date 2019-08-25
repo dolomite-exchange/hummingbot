@@ -66,8 +66,13 @@ class OrderBucket(object):
         status_str = self._status_str()
         type_str = self._type_str()
         accessory_str = " <" if is_current_price else ""
+        if (self.price < s_decimal_one):
+            price_str = f"{self.price:.6f}"
+        else:
+            price_str = f"{self.price:.2f}"
+
         return (
-            "  " + f"{self.price:.2f} {accessory_str}".ljust(12) + f"{type_str}".rjust(5) + f" ({status_str}) | ".rjust(12)
+            "  " + f"{price_str} {accessory_str}".ljust(12) + f"{type_str}".rjust(5) + f" ({status_str}) | ".rjust(12)
             + self._volume_bar(64, max_secondary_amount) + "\n"
             + "  " + (border_str * 95)
         )
@@ -124,7 +129,7 @@ class BucketOrderBook(object):
     def get_buckets(self, current_price: Decimal) -> List[OrderBucket]:
 
         def to_bucket_price(num):
-            return BucketOrderBook.to_bucket_price(num, self.coordinator.step_increment)
+            return BucketOrderBook.to_bucket_price(num, Decimal(self.coordinator.step_increment))
 
         current_price = to_bucket_price(current_price)
         order_book = self.market.order_books[self.market_symbol]
@@ -320,5 +325,6 @@ class BucketOrderBook(object):
 
     @classmethod
     def to_bucket_price(cls, price, step_increment):
+        print(step_increment)
         round_k = Decimal(1) / Decimal(step_increment)
         return Decimal(math.floor(Decimal(price) * round_k) / round_k)

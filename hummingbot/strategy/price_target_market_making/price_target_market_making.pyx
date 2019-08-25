@@ -99,10 +99,10 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
 
     def __init__(self,
                  market_info: MarketSymbolPair,
-                 target_volume_usd: float,
-                 target_spread_percentage: float,
+                 target_volume_usd: Decimal,
+                 target_spread_percentage: Decimal,
                  target_num_orders: int,
-                 price_step_increment: float,
+                 price_step_increment: Decimal,
                  poll_interval: float = 15):
         super().__init__()
 

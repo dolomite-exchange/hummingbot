@@ -31,13 +31,11 @@ price_target_market_making_config_map = {
                                                   validator=is_valid_market_symbol_pair),
     "target_volume_usd":                ConfigVar(key="target_volume_usd",
                                                   prompt="Enter the USD value you would like to put towards market "
-                                                         "making on this pair (Enter 20000 to signify $20,000) >>> ",
-                                                  type_str="float"),
+                                                         "making on this pair (Enter 20000 to signify $20,000) >>> "),
     "target_spread_percentage":         ConfigVar(key="target_spread_percentage",
                                                   prompt="Enter the spread percentage you would like to target "
                                                          "(Enter 0.01 to signify 1%, default is 0.02) >>> ",
-                                                  type_str="float",
-                                                  default=0.02),
+                                                  default="0.02"),
     "target_num_orders":                ConfigVar(key="target_num_orders",
                                                   prompt="How many orders would you like on each side of the market? "
                                                          "(default is 10) >>> ",
@@ -45,6 +43,5 @@ price_target_market_making_config_map = {
                                                   default=10),
     "price_step_increment":             ConfigVar(key="price_step_increment",
                                                   prompt="Enter the price step increment orders will be submitted at "
-                                                         "(e.g. 0.25 -> 200.00, 200.25, 200.50, etc.) >>>",
-                                                  type_str="float")
+                                                         "(e.g. 0.25 -> 200.00, 200.25, 200.50, etc.) >>>")
 }
