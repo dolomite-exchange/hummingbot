@@ -1,6 +1,6 @@
 import math
 from enum import Enum
-from decimal import Decimal
+from decimal import *
 from typing import (
     List,
     Tuple,
@@ -20,8 +20,23 @@ from .ptmm_volume_coordinator import VolumeCoordinator
 s_decimal_zero = Decimal(0)
 s_decimal_one = Decimal(1)
 
+def num_d(amount):
+    return abs(Decimal(amount).normalize().as_tuple().exponent)
+
 def round_d(amount, n):
-    return Decimal(round(Decimal(amount), n))
+    if n < 1: return Decimal(int(amount))
+    return Decimal(str(amount)).quantize(Decimal('0.' + ('0' * (n - 1)) + '1'), rounding=ROUND_HALF_DOWN)
+
+def fixated_price(quantity, price, bucket_type) -> Decimal:
+    if quantity == 0: return quantity
+    num_quantity_decimals = 8 - num_d(price) - 1
+    quantity = round_d(quantity, num_quantity_decimals)
+
+    # TODO: remove these lines
+    size = round_d(quantity * price, 8)
+    real_p = size / quantity 
+    print(f"{price}: {size} / {quantity} = {real_p}")
+    return quantity
 
 
 class BucketType(Enum):
@@ -66,10 +81,11 @@ class OrderBucket(object):
         status_str = self._status_str()
         type_str = self._type_str()
         accessory_str = " <" if is_current_price else ""
-        if (self.price < s_decimal_one):
-            price_str = f"{self.price:.6f}"
-        else:
-            price_str = f"{self.price:.2f}"
+        # if (self.price < s_decimal_one):
+        #     price_str = f"{self.price:.6f}"
+        # else:
+        #     price_str = f"{self.price:.2f}"
+        price_str = self.price
 
         return (
             "  " + f"{price_str} {accessory_str}".ljust(12) + f"{type_str}".rjust(5) + f" ({status_str}) | ".rjust(12)
@@ -240,15 +256,15 @@ class BucketOrderBook(object):
                 target_usd = s_decimal_zero
                 min_usd = s_decimal_zero
 
-            min_secondary = round_d(self.market_rates.from_base(min_usd, "USD", secondary_ticker), 4)
-            min_primary = round_d(min_secondary / price, 4)
-            target_secondary = round_d(self.market_rates.from_base(target_usd, "USD", secondary_ticker), 4)
-            target_primary = round_d(target_secondary / price, 4)
+            target_secondary = round_d(self.market_rates.from_base(target_usd, "USD", secondary_ticker), 8)
+            min_secondary = round_d(self.market_rates.from_base(min_usd, "USD", secondary_ticker), 8)
+            current_secondary = round_d(current_secondary, 8)
+            provided_secondary = round_d(provided_secondary, 8)
             
-            current_primary = round_d(current_primary, 4)
-            provided_primary = round_d(provided_primary, 4)
-            current_secondary = round_d(current_secondary, 4)
-            provided_secondary = round_d(provided_secondary, 4)
+            target_primary = fixated_price(target_secondary / price, price, target_type)
+            min_primary = round_d(min_secondary / price, 8)
+            current_primary = round_d(current_primary, 8)
+            provided_primary = round_d(provided_primary, 8)
 
             primary_amounts = BucketAmounts(current=current_primary,
                                             provided=provided_primary,
@@ -279,8 +295,11 @@ class BucketOrderBook(object):
         num_orders = Decimal(self.coordinator.target_num_orders)
         step_increment = Decimal(self.coordinator.step_increment)
 
-        lowest_ask_price = BucketOrderBook.to_bucket_price(current_price * (s_decimal_one + spread_p), step_increment) + step_increment
-        highest_bid_price = BucketOrderBook.to_bucket_price(current_price * (s_decimal_one - spread_p), step_increment)
+        def to_bucket_price(num):
+            return BucketOrderBook.to_bucket_price(num, Decimal(self.coordinator.step_increment))
+
+        lowest_ask_price = to_bucket_price(current_price * (s_decimal_one + spread_p) + (step_increment * Decimal(1.05)))
+        highest_bid_price = to_bucket_price(current_price * (s_decimal_one - spread_p))
 
         highest_bucket_price = lowest_ask_price + (num_orders * step_increment)
         lowest_bucket_price = highest_bid_price - (num_orders * step_increment)
@@ -291,9 +310,9 @@ class BucketOrderBook(object):
         _p = lowest_bucket_price
 
         while(_p <= highest_bucket_price): 
-            if _p < highest_bid_price: bid_prices.append(Decimal(_p))
-            elif _p <= lowest_ask_price: spread_prices.append(Decimal(_p)) 
-            elif _p <= highest_bucket_price: ask_prices.append(Decimal(_p)) 
+            if _p < highest_bid_price: bid_prices.append(to_bucket_price(_p))
+            elif _p <= lowest_ask_price: spread_prices.append(to_bucket_price(_p)) 
+            elif _p <= highest_bucket_price: ask_prices.append(to_bucket_price(_p)) 
             _p += step_increment
 
         return (bid_prices, spread_prices, ask_prices)
@@ -325,6 +344,8 @@ class BucketOrderBook(object):
 
     @classmethod
     def to_bucket_price(cls, price, step_increment):
-        print(step_increment)
+        step_increment = round_d(step_increment, 8)
+        step_increment_num_d = num_d(step_increment)
         round_k = Decimal(1) / Decimal(step_increment)
-        return Decimal(math.floor(Decimal(price) * round_k) / round_k)
+        raw_price = Decimal(math.floor(Decimal(price) * round_k) / round_k)
+        return round_d(raw_price, step_increment_num_d)

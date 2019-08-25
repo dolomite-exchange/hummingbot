@@ -336,6 +336,9 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
     # ==========================================================
 
     cdef c_did_fill_order(self, object fill):
+        self.logger().info("FILLED!")
+        self.logger().info(fill)
+        
         cdef:
             LimitOrder limit_order = self._sb_order_tracker.c_get_limit_order(fill.symbol, fill.order_id)
             LimitOrder replacement = LimitOrder(
@@ -353,6 +356,20 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
             self._sb_order_tracker._tracked_maker_orders = [
                 replacement if o.client_order_id == limit_order.client_order_id else o 
                 for o in makers]
+
+    # 2019-08-24 22:00:00,463 - hummingbot.strategy.price_target_market_making.price_target_market_making - INFO - FILLED!
+    # 2019-08-24 22:00:00,463 - hummingbot.strategy.price_target_market_making.price_target_market_making - INFO - OrderFilledEvent(timestamp=1566698400000, order_id='f134c2a2', symbol='WETH-DAI', trade_type=<TradeType.BUY: 1>, order_type=<OrderType.LIMIT: 2>, price=188.75, amount=0.1, trade_fee=TradeFee(percent=-0.0008, flat_fees=[]), exchange_trade_id='')
+    # 2019-08-24 22:00:00,464 - hummingbot.core.network_iterator - ERROR - Unexpected error while processing event 107.
+    # Traceback (most recent call last):
+    #   File "hummingbot/core/pubsub.pyx", line 165, in hummingbot.core.pubsub.PubSub.c_trigger_event
+    #     typed_listener.c_call(arg)
+    #   File "hummingbot/strategy/strategy_base.pyx", line 51, in hummingbot.strategy.strategy_base.OrderFilledListener.c_call
+    #     self._owner.c_did_fill_order(arg)
+    #   File "hummingbot/strategy/price_target_market_making/price_target_market_making.pyx", line 345, in hummingbot.strategy.price_target_market_making.price_target_market_making.PriceTargetMarketMakingStrategy.c_did_fill_order
+    #     limit_order.client_order_id,
+    # AttributeError: 'NoneType' object has no attribute 'client_order_id'
+    # 2019-08-24 22:00:00,465 - hummingbot.core.event.event_reporter - EVENT_LOG - {"order_id": "f134c2a2", "symbol": "WETH-DAI", "trade_type": "TradeType.BUY", "order_type": "OrderType.LIMIT", "price": 188.75, "amount": 0.1, "trade_fee": [-0.0008, []], "exchange_trade_id": "", "event_name": "OrderFilledEvent", "event_source": "dolomite", "ts": 1566698400000}
+    # 2019-08-24 22:00:07,575 - hummingbot.core.network_iterator - INFO - Successfully cancelled order e7cb3f3e
 
     cdef c_start(self, Clock clock, double timestamp):
         StrategyBase.c_start(self, clock, timestamp)

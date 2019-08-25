@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import *
 from typing import (
     List,
     Tuple,
@@ -12,15 +12,17 @@ from hummingbot.strategy.price_target_market_making.price_target_market_making_c
     price_target_market_making_config_map
 )
 
+def to_decimal(f):
+    return Decimal(str(f)).quantize(Decimal('0.00000001'), rounding=ROUND_HALF_DOWN).normalize()
 
 def start(self):
     try:
         market = price_target_market_making_config_map.get("market").value.lower()
         raw_market_symbol = price_target_market_making_config_map.get("market_symbol_pair").value.upper()
-        target_volume_usd = Decimal(price_target_market_making_config_map.get("target_volume_usd").value)
-        target_spread_percentage = Decimal(price_target_market_making_config_map.get("target_spread_percentage").value)
+        target_volume_usd = to_decimal(price_target_market_making_config_map.get("target_volume_usd").value)
+        target_spread_percentage = to_decimal(price_target_market_making_config_map.get("target_spread_percentage").value)
         target_num_orders = price_target_market_making_config_map.get("target_num_orders").value
-        price_step_increment = Decimal(price_target_market_making_config_map.get("price_step_increment").value)
+        price_step_increment = to_decimal(price_target_market_making_config_map.get("price_step_increment").value)
 
         try:
             assets: Tuple[str, str] = self._initialize_market_assets(market, [raw_market_symbol])[0]
