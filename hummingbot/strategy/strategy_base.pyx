@@ -374,9 +374,6 @@ cdef class StrategyBase(TimeIterator):
         if not (isinstance(amount, Decimal) and isinstance(price, Decimal)):
             raise TypeError("price and amount must be Decimal objects.")
 
-        print(f"Correct: {amount}")
-        print(f"Correct: {price}")
-
         cdef:
             dict kwargs = {
                 "expiration_ts": self._current_timestamp + max(self._sb_limit_order_min_expiration, expiration_seconds)
@@ -410,9 +407,6 @@ cdef class StrategyBase(TimeIterator):
         if not (isinstance(amount, Decimal) and isinstance(price, Decimal)):
             raise TypeError("price and amount must be Decimal objects.")
 
-        print(f"Correct: {amount}")
-        print(f"Correct: {price}")
-        
         cdef:
             dict kwargs = {
                 "expiration_ts": self._current_timestamp + max(self._sb_limit_order_min_expiration, expiration_seconds)

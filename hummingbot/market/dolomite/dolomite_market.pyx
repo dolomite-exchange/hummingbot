@@ -79,7 +79,8 @@ API_CALL_TIMEOUT = 10.0
 # ==========================================================
 
 
-API_REST_ENDPOINT = "https://exchange-api.dolomite.io"
+# API_REST_ENDPOINT = "https://exchange-api.dolomite.io"
+API_REST_ENDPOINT = "https://exchange-api-test.dolomite.io"
 EXCHANGE_INFO_ROUTE = "/v1/info"
 MARKETS_ROUTE = "/v1/markets?hydrate_all=true"
 PORTFOLIO_ROUTE = "/v1/addresses/:address/portfolio"
@@ -337,7 +338,6 @@ cdef class DolomiteMarket(MarketBase):
         cancellation_event = OrderCancelledEvent(now(), client_order_id)
         
         if in_flight_order is None:
-            self.stop_tracking(client_order_id)
             self.trigger_event(ORDER_CANCELLED_EVENT, cancellation_event)
             return
 
@@ -604,8 +604,7 @@ cdef class DolomiteMarket(MarketBase):
                 dolomite_order_request = await self.api_request("GET", GET_ORDER_ROUTE.replace(":order_id", dolomite_order_id))
                 dolomite_order = dolomite_order_request["data"]
             except Exception:
-                self.logger().warn(f"Tracked Dolomite order {tracked_order.identifier} not found from api")
-                self.stop_tracking(client_order_id)
+                self.logger().warn(f"Failed to fetch tracked Dolomite order {tracked_order.identifier} from api")
                 continue
 
             (primary_ticker, secondary_ticker) = self.split_symbol(dolomite_order["market"])

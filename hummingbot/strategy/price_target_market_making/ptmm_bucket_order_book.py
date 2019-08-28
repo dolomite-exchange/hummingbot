@@ -30,13 +30,7 @@ def round_d(amount, n):
 def fixated_price(quantity, price, bucket_type) -> Decimal:
     if quantity == 0: return quantity
     num_quantity_decimals = 8 - num_d(price) - 1
-    quantity = round_d(quantity, num_quantity_decimals)
-
-    # TODO: remove these lines
-    size = round_d(quantity * price, 8)
-    real_p = size / quantity 
-    print(f"{price}: {size} / {quantity} = {real_p}")
-    return quantity
+    return round_d(quantity, num_quantity_decimals)
 
 
 class BucketType(Enum):
@@ -81,14 +75,9 @@ class OrderBucket(object):
         status_str = self._status_str()
         type_str = self._type_str()
         accessory_str = " <" if is_current_price else ""
-        # if (self.price < s_decimal_one):
-        #     price_str = f"{self.price:.6f}"
-        # else:
-        #     price_str = f"{self.price:.2f}"
-        price_str = self.price
 
         return (
-            "  " + f"{price_str} {accessory_str}".ljust(12) + f"{type_str}".rjust(5) + f" ({status_str}) | ".rjust(12)
+            "  " + f"{self.price} {accessory_str}".ljust(12) + f"{type_str}".rjust(5) + f" ({status_str}) | ".rjust(12)
             + self._volume_bar(64, max_secondary_amount) + "\n"
             + "  " + (border_str * 95)
         )

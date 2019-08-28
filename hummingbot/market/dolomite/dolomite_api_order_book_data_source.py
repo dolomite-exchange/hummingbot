@@ -38,8 +38,10 @@ from hummingbot.core.data_type.order_book_tracker_entry import (
 from hummingbot.core.data_type.order_book_message import DolomiteOrderBookMessage 
 
 
-REST_URL = "https://exchange-api.dolomite.io"
-WS_URL = "wss://exchange-api.dolomite.io/ws-connect"
+# REST_URL = "https://exchange-api.dolomite.io"
+REST_URL = "https://exchange-api-test.dolomite.io"
+# WS_URL = "wss://exchange-api.dolomite.io/ws-connect"
+WS_URL = "wss://exchange-api-test.dolomite.io/ws-connect"
 MARKETS_URL = f"{REST_URL}/v1/markets"
 SNAPSHOT_URL = f"{REST_URL}/v1/orders/markets/:trading_pair/depth/unmerged"
 SNAPSHOT_WS_ROUTE = "/v1/orders/markets/-market-/depth/unmerged";
