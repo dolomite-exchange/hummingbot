@@ -299,7 +299,7 @@ cdef class PriceTargetMarketMakingStrategy(StrategyBase):
             active_order_tracker=self._sb_order_tracker,
             market_rates=self.market_rates)
         
-        return (order_book.get_buckets(target_price), target_price, round(actual_target_price, 4))
+        return (order_book.get_buckets(target_price), target_price, round(actual_target_price, 8))
 
 
     # ----------------------------------------

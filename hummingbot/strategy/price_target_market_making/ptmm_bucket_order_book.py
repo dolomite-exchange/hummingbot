@@ -245,15 +245,17 @@ class BucketOrderBook(object):
                 target_usd = s_decimal_zero
                 min_usd = s_decimal_zero
 
+            # TODO - make dynamic decimals
             target_secondary = round_d(self.market_rates.from_base(target_usd, "USD", secondary_ticker), 8)
             min_secondary = round_d(self.market_rates.from_base(min_usd, "USD", secondary_ticker), 8)
             current_secondary = round_d(current_secondary, 8)
             provided_secondary = round_d(provided_secondary, 8)
-            
+
+            # TODO - make dynamic
             target_primary = fixated_price(target_secondary / price, price, target_type)
-            min_primary = round_d(min_secondary / price, 8)
-            current_primary = round_d(current_primary, 8)
-            provided_primary = round_d(provided_primary, 8)
+            min_primary = round_d(min_secondary / price, 0)
+            current_primary = round_d(current_primary, 0)
+            provided_primary = round_d(provided_primary, 0)
 
             primary_amounts = BucketAmounts(current=current_primary,
                                             provided=provided_primary,
