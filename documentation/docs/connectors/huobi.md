@@ -2,12 +2,23 @@
 
 ## About Huobi Global
 
-Huobi is a global cryptocurrency centralized exchange based in Singapore and has expanded its offices in Hong Kong, Korea, Japan and the United States. As of March 2018, Huobi processed around US $1 billion in trades daily.
+Huobi is a global, centralized cryptocurrency exchange that was started in Singapore, and has since expanded its offices to Hong Kong, Korea, Japan, and the United States. As of March 2018, Huobi processed around US $1 billion in trades daily.
 
 
 ## Using the Connector
 
 Because [Huobi](https://www.hbg.com/) is a centralized exchange, you will need to generate and provide your API key in order to trade using Hummingbot.
+
+```
+Enter your Huobi API key >>>
+Enter your Huobi secret key >>>
+```
+
+Private keys and API keys are stored locally for the operation of the Hummingbot client only. At no point will private or API keys be shared to CoinAlpha or be used in any way other than to authorize transactions required for the operation of Hummingbot.
+
+!!! tip "Copying and pasting into Hummingbot"
+    See [this page](https://docs.hummingbot.io/faq/troubleshooting/#paste-items-from-clipboard-in-putty) for more instructions in our Support section.
+
 
 ### Creating Huobi API Keys
 
@@ -15,9 +26,10 @@ Because [Huobi](https://www.hbg.com/) is a centralized exchange, you will need t
 
 ![huobi1](/assets/img/huobi-account.png)
 
-2 - Add notes (required) and make sure the checkbox for **Trade** is selected to trade on Hummingbot. Withdraw and bind IP address is optional depending on your preference.
+2 - Add notes (required) and make sure the checkbox for **Trade** is selected to trade on Hummingbot.
 
-For general use of Hummingbot, withdraw permission is not required and it is advised to create API keys that are only "Trade" enabled.
+!!! warning "API key permissions"
+    We recommend using only **"trade"** enabled API keys; enabling **"withdraw", "transfer", or the equivalent** is unnecessary for current Hummingbot strategies.
 
 ![huobi2](/assets/img/huobi-create-api-key.png)
 
@@ -40,12 +52,14 @@ For general use of Hummingbot, withdraw permission is not required and it is adv
 
 ### Minimum Order Sizes
 
-You may refer to [this page](https://support.huobi.so/hc/en-us/articles/360000400491-Trade-Limits) for the minimum order size per trading pair.
+You may refer to [this page](https://huobiglobal.zendesk.com/hc/en-us/articles/360000304441-Trade-Limits) for the minimum order size per trading pair.
 
-## Transaction Fees
+### Transaction Fees
 
 Huobi charges 0.2% on both maker and taker for most pairs. However, Huobi VIP users can also enjoy fees at discounted rate.
 
 No maker and taker fees for trading on stablecoins with HUSD (PAX/HUSD, USDC/HUSD, TUSD/HUSD, USDT/HUSD).
 
 See [this page](https://www.hbg.com/en-us/about/fee/) for more information about their fees.
+
+Users can override the default fees by editing [`conf_fee_overrides.yml`](/advanced/fee-overrides/).
